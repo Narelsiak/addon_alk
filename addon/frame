@@ -1,0 +1,596 @@
+// ==UserScript==
+// @name         a5_alkatria_ramki
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+//usuwanie item-type-x do ustawien
+(function() {
+var addonName = 'item_frame';
+var description = ['Ramki przedmiotów', 'Ramki przedmiotów w dowolnej konfiguracji dla poszczególnych typow, wymagana pozioma grafika z kostkami 32x32 w ułożeniu poziomym. Wybranie opcji -1 powoduje, że ramki dla danego typu nie będą się wyświetlać.'];
+var defaultSettings = {frame_url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112456767295608/2.gif", show_frame: 1, remove_orginal_frame: 1, common_frame: 0, rare_frame: 2, epic_frame: 4, legendary_frame: 1, mythic_frame: 5, raw_frame: 3};//zmienne
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+var raw_array = [241,267,268,867,868,869,887,1754,2164,2165,2644,2645,2655,2656];
+var frame_list = [
+      {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112447770509422/1.gif",
+        autor: "szynkacz",},
+      {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112456767295608/2.gif",
+        autor: "szynkacz",},
+    {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112466850402464/3.gif",
+        autor: "szynkacz",},
+    {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112497271681105/4.gif",
+        autor: "szynkacz",},
+    {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112509997195334/5.gif",
+        autor: "szynkacz",},
+    {
+        url: "https://cdn.discordapp.com/attachments/1032250720977694720/1087112517744087190/6.gif",
+        autor: "szynkacz",},
+    {
+        url: "https://cdn.discordapp.com/attachments/1085494296414797835/1087384186119266354/Ramki2.gif",
+        autor: "Mez",},
+];
+function init(){
+    if(settings.show_frame){
+        $(`<style>${createBigString()}</style>`).appendTo("head");
+    }
+}
+function createBigString(){
+    //0 - zwykle, 1 - rzadkie, 2 - epickie, 3-legendarne, 4-mityczne
+    if(!settings.frame_url.length) return window.game.broadCast("Brak ramek - należy je dodać w ustawieniach", 10000);
+    var string = ``;
+    if(settings.remove_orginal_frame){
+        string+=`.item-type-1 {filter: none !important;-webkit-filter:none !important;}
+                 .item-type-2 {filter: none !important;-webkit-filter:none !important;}
+                 .item-type-3 {filter: none !important;-webkit-filter:none !important;}
+                 .item-type-4 {filter: none !important;-webkit-filter:none !important;}`
+    }
+    for(var i = 1;i < 9999;i++){
+        if(raw_array.includes(i)){
+            string+=`${settings.raw_frame != -1 ? `.item-${i}.item-type-0 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.raw_frame * -32}px 0px !important;}` : ``}`;
+            continue;
+        }
+        string += `
+        ${settings.common_frame != -1 ? `.item-${i}.item-type-0 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.common_frame * -32}px 0px !important;}` : ``}
+        ${settings.rare_frame != -1 ? `.item-${i}.item-type-1 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.rare_frame * -32}px 0px !important;}` : ``}
+        ${settings.epic_frame != -1 ? `.item-${i}.item-type-2 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.epic_frame * -32}px 0px !important;}` : ``}
+        ${settings.legendary_frame != -1 ? `.item-${i}.item-type-3 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.legendary_frame * -32}px 0px !important;}` : ``}
+        ${settings.mythic_frame != -1 ? `.item-${i}.item-type-4 {background: url(https://alkatria.pl/templates/client/default/images/items/${i}.png), url('${settings.frame_url}'); background-position: 0px 0px,${settings.mythic_frame * -32}px 0px !important;}` : ``}
+        `;
+    }
+    return string;
+}
+function frameCreate(pattern){
+var stringFrame = ``;
+    for(var f of frame_list){
+        stringFrame+= `<div style = "width:204px;background-color: rgba(176, 164, 164, 0.3);" class = "frame_show_list store-offer premium-item ${f.url == pattern ? 'current_frame' : '' }">
+        <img src="${f.url}" alt="item_graphic" width="192px" height="32px"><br>
+        <div>Autor: ${f.autor}</div>
+        </div>`
+    }
+    $(`<style>.current_frame {filter: drop-shadow(red 0px 0px 10px)}</style>`).appendTo("head");
+    return stringFrame;
+}
+window.reset_default_item_frame = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_item_frame = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+         <input id = "option_1" name = "show_frame" class="settings-checkbox" type="checkbox" ${settings.show_frame == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Pokazuj ramki </div></label>
+<div data-tip="Lista wbudowanych ramek" id = "frame_list" class =" mL60 button-2 overlock font-20" style ="position:absolute;left:200px;margin-left: auto; margin-right: auto;">Lista ramek</div>
+         <div class = "clear mB5"></div>
+         Podaj link do ramek: <input id = "frame_show_url" type = "text" class="form-input" placeholder = "link do ramek" style="width: 200px" name = "frame_url" ${settings.frame_url.length > 0 ? 'value="'+settings.frame_url+'"' : ""}>
+         <div onclick = "document.getElementById('frame_test_show').src = document.getElementById('frame_show_url').value" id = "load_frame" class ="absolute mL60 button-1 overlock font-20" style ="left:400px;top:200px;">Wczytaj</div>
+         <div class = "clear mB5"></div>
+
+         <input id = "option_2" name = "remove_orginal_frame" class="settings-checkbox" type="checkbox" ${settings.remove_orginal_frame == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Ukrywaj wbudowany efekt przedmiotów *obramówka itemu* </div></label>
+         <div class = "clear mB5"></div>
+         Wybrane ramki:
+         <div>
+            <div style ="display:inline-block;vertical-align:top;font-size:10px;width:32px;height:32px;">BRAK</div><img id = "frame_test_show" src="${settings.frame_url}" alt="item_graphic"><br>
+            <div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">-1</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">0</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">1</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">2</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">3</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">4</div><div style ="display:inline-block;text-align: center;font-size: 20px;width:32px;height:32px;">5</div>
+         </div>
+
+
+<table>
+<tr>
+   <td>Surowce: </td>
+   <td><select name = "raw_frame"><option ${settings.raw_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.raw_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.raw_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.raw_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.raw_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.raw_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.raw_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+   <td>Zwykle: </td>
+   <td><select name = "common_frame"><option ${settings.common_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.common_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.common_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.common_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.common_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.common_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.common_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+   <td>Rzadkie</td>
+   <td><select name = "rare_frame"><option ${settings.rare_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.rare_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.rare_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.rare_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.rare_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.rare_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.rare_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+</tr>
+<tr>
+   <td>Epickie: </td>
+   <td><select name = "epic_frame"><option ${settings.epic_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.epic_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.epic_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.epic_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.epic_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.epic_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.epic_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+   <td>Legendarne: </td>
+   <td><select name = "legendary_frame"><option ${settings.legendary_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.legendary_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.legendary_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.legendary_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.legendary_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.legendary_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.legendary_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+   <td>Mityczne</td>
+   <td><select name = "mythic_frame"><option ${settings.mythic_frame == -1 ? "selected" : ""} value = "-1"> -1 </option><option ${settings.mythic_frame == 0 ? "selected" : ""} value = "0"> 0 </option><option ${settings.mythic_frame == 1 ? "selected" : ""} value = "1"> 1 </option><option ${settings.mythic_frame == 2 ? "selected" : ""} value = "2"> 2 </option><option ${settings.mythic_frame == 3 ? "selected" : ""} value = "3"> 3 </option><option ${settings.mythic_frame == 4 ? "selected" : ""} value = "4"> 4 </option><option ${settings.mythic_frame == 5 ? "selected" : ""} value = "5"> 5 </option></select></td>
+</tr>
+</table>
+
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_item_frame();
+        })
+    };
+    var frame_list = $("#frame_list");
+    if(frame_list.length){
+     frame_list[0].addEventListener("click", e=> {
+         $("#window-settings-addon").hide();
+$(`<div id = "frame_list_">
+<div class = "window-4-heading">
+<div class="title-label overlock font-20 draggable">Lista ramek</div>
+<div style = "position:absolute; left:450px; top:10px; width:37px;height:37px;cursor:pointer;display:inline-block;background: url(https://alkatria.pl/templates/client/default/images/icons/close_n.png);"class = "heading-4" onclick = "$('#frame_list_').remove(); $('#window-settings-addon').show();"></div>
+</div>
+<div style = "overflow-y: auto" class = "window-equipment">
+${frameCreate(document.getElementById('frame_show_url').value)}
+</div>
+</div>`).appendTo("#display-window");
+         $(".frame_show_list").each(function(index) {
+             $(this).on("click", function(){
+                 if($(this).hasClass("current_frame")) return;
+                 $(".frame_show_list.current_frame").removeClass("current_frame");
+                 $(this).addClass("current_frame");
+                 $("#frame_show_url")[0].value = $(this).children()[0].src;
+                 $("#frame_test_show")[0].src = $(this).children()[0].src;
+             });
+         });
+     });
+    }
+}
+init();
+})();
+/*
+    var frame_link = 'https://i.imgur.com/GnAp9mQ.png';
+    $(`<style>
+    .frame0 {background-image:url('${frame_link}'); background-position: 0px 0px !important;}
+    .frame1 {background-image:url('${frame_link}'); background-position: 128px 0px !important;}
+    .frame2 {background-image:url('${frame_link}'); background-position: 64px 0px !important;}
+    .frame3 {background-image:url('${frame_link}'); background-position: 96px 0px !important;}
+
+
+    .item-type-1 {filter: none !important;-webkit-filter:none !important;}
+    .item-type-2 {filter: none !important;-webkit-filter:none !important;}
+    .item-type-3 {filter: none !important;-webkit-filter:none !important;}
+    </style>`).appendTo("head");
+
+    (function(f) {
+    window.windowDisplay.displayAuctionsHistory = function() {
+        f.apply(window.windowDisplay, arguments);
+        var data = window.windowDisplay.historyData;
+        if(!data) return;
+        switch(arguments[0]){
+            case 'current':
+                for(var s of data.current){
+                    if(s.type > 4) continue;
+                    $("#auction_item_"+s.id)[0].innerHTML = "";
+                    if(s.type == 0){
+                        $("#auction_item_"+s.id).append("<div style = 'pointer-events:none;' id = 'item__"+s.id+"'class = 'item frame0'></div>");
+                    }
+                    if(s.type == 1){
+                        $("#auction_item_"+s.id).append("<div style = 'pointer-events:none;' id = 'item__"+s.id+"'class = 'item frame1'></div>");
+                    }
+                    if(s.type == 2){
+                        $("#auction_item_"+s.id).append("<div style = 'pointer-events:none;' id = 'item__"+s.id+"'class = 'item frame2'></div>");
+                    }
+                    if(s.type == 3){
+                        $("#auction_item_"+s.id).append("<div style = 'pointer-events:none;' id = 'item__"+s.id+"'class = 'item frame3'></div>");
+                    }
+                    $("#auction_item_"+s.id).removeClass("item-"+s.item_id);
+                    $("#auction_item_"+s.id).removeClass("item-type-"+s.type);
+                    $("#item__"+s.id).append("<div style = 'position:relative;pointer-events:none;' class = 'item item-"+s.item_id+"'></div>");
+                    if(s.count != 1){
+                        $("#auction_item_"+s.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+s.count+"</div>");
+                    }
+                }
+                break;
+            case 'bought':
+                for(var t of data.bought){
+                    if(t.type > 4) continue;
+                    $("#auction_item_"+t.id)[0].innerHTML = "";
+                    if(t.type == 0){
+                        $("#auction_item_"+t.id).append("<div style = 'pointer-events:none;' id = 'item__"+t.id+"'class = 'item frame0'></div>");
+                    }
+                    if(t.type == 1){
+                        $("#auction_item_"+t.id).append("<div style = 'pointer-events:none;' id = 'item__"+t.id+"'class = 'item frame1'></div>");
+                    }
+                    if(t.type == 2){
+                        $("#auction_item_"+t.id).append("<div style = 'pointer-events:none;' id = 'item__"+t.id+"'class = 'item frame2'></div>");
+                    }
+                    if(t.type == 3){
+                        $("#auction_item_"+t.id).append("<div style = 'pointer-events:none;' id = 'item__"+t.id+"'class = 'item frame3'></div>");
+                    }
+                    $("#auction_item_"+t.id).removeClass("item-"+t.item_id);
+                    $("#auction_item_"+t.id).removeClass("item-type-"+t.type);
+                    $("#item__"+t.id).append("<div style = 'position:relative;pointer-events:none;' class = 'item item-"+t.item_id+"'></div>");
+                    if(t.count != 1){
+                        $("#auction_item_"+t.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+t.count+"</div>");
+                    }
+                }
+                break;
+            case 'sold':
+                for(var u of data.sold){
+                    if(u.type > 4) continue;
+                    $("#auction_item_"+u.id)[0].innerHTML = "";
+                    if(u.type == 0){
+                        $("#auction_item_"+u.id).append("<div style = 'pointer-events:none;' id = 'item__"+u.id+"'class = 'item frame0'></div>");
+                    }
+                    if(u.type == 1){
+                        $("#auction_item_"+u.id).append("<div style = 'pointer-events:none;' id = 'item__"+u.id+"'class = 'item frame1'></div>");
+                    }
+                    if(u.type == 2){
+                        $("#auction_item_"+u.id).append("<div style = 'pointer-events:none;' id = 'item__"+u.id+"'class = 'item frame2'></div>");
+                    }
+                    if(u.type == 3){
+                        $("#auction_item_"+u.id).append("<div style = 'pointer-events:none;' id = 'item__"+u.id+"'class = 'item frame3'></div>");
+                    }
+                    $("#auction_item_"+u.id).removeClass("item-"+u.item_id);
+                    $("#auction_item_"+u.id).removeClass("item-type-"+u.type);
+                    $("#item__"+u.id).append("<div style = 'position:relative;pointer-events:none;' class = 'item item-"+u.item_id+"'></div>");
+                    if(u.count != 1){
+                        $("#auction_item_"+u.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+u.count+"</div>");
+                    }
+                }
+                break;
+        }
+    }
+    })(window.windowDisplay.displayAuctionsHistory);
+
+(function(f) {
+    window.npc.selectSellItem = function() {
+        f.apply(window.npc, arguments);
+        var el = $("#sell-item-"+arguments[0]);
+        switch(parseInt(el.attr("data-tip-type"))){
+            case 0:
+                el.append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame0'></div>");
+                break;
+            case 1:
+                el.append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame1'></div>");
+                break;
+            case 2:
+                el.append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame2'></div>");
+                break;
+            case 3:
+                el.append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame3'></div>");
+                break;
+        }
+        var elC = $(el).last().attr("class");
+        elC = elC.slice(elC.lastIndexOf('-') + 1);
+        $(el).removeClass("item-"+elC);
+        $(el).append("<div style = 'position:relative;pointer-events:none;' class = 'item item-"+elC+"'></div>");
+        console.log(elC);
+    }
+})(window.npc.selectSellItem);
+
+function createFrame(type, data, onlyBackpack){
+    switch(type){
+        case "depo":
+            for(var i of data.backpack){
+                $("#item_"+i.slot)[0].innerHTML = "";
+                if(i.type == 0){
+                    $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame0'></div>");
+                }
+                if(i.type == 1){
+                    $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame1'></div>");
+                }
+                if(i.type == 2){
+                    $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame2'></div>");
+                }
+                if(i.type == 3){
+                    $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame3'></div>");
+                }
+                $("#item_"+i.slot).removeClass("item-"+i.id);
+                $("#item_"+i.slot).removeClass("item-type-"+i.type);
+                $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item item-"+i.id+"'></div>");
+                if(i.count != 1){
+                    $("#item_"+i.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+i.count+"</div>");
+                }
+            }
+            if(onlyBackpack == 1) return;
+            for(var j of data.deposit){
+                $("#deposit_item_"+j.slot)[0].innerHTML = "";
+                if(j.type == 0){
+                    $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame0'></div>");
+                }
+                if(j.type == 1){
+                    $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame1'></div>");
+                }
+                if(j.type == 2){
+                    $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame2'></div>");
+                }
+                if(j.type == 3){
+                    $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item frame3'></div>");
+                }
+                $("#deposit_item_"+j.slot).removeClass("deposit_item_-"+j.id);
+                $("#deposit_item_"+j.slot).removeClass("item-type-"+j.type);
+                $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item item-"+j.id+"'></div>");
+                if(j.count != 1){
+                    $("#deposit_item_"+j.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+j.count+"</div>");
+                }
+            }
+            break;
+        case 'backpack':
+            for(var k of data.data.backpack){
+                $("#item_"+k.slot)[0].innerHTML = "";
+                if(k.type == 0){
+                    $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame0'></div>");
+                }
+                if(k.type == 1){
+                    $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame1'></div>");
+                }
+                if(k.type == 2){
+                    $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame2'></div>");
+                }
+                if(k.type == 3){
+                    $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame3'></div>");
+                }
+                $("#item_"+k.slot).removeClass("item-"+k.id);
+                $("#item_"+k.slot).removeClass("item-type-"+k.type);
+                $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item item-"+k.id+"'></div>");
+                if(k.count != 1){
+                    $("#item_"+k.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item'>"+k.count+"</div>");
+                }
+            }
+            for(var l of data.data.equipment){
+                $("#equipment_"+l.slot)[0].innerHTML = "";
+                if(l.type == 0){
+                    $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame0'></div>");
+                }
+                if(l.type == 1){
+                    $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame1'></div>");
+                }
+                if(l.type == 2){
+                    $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame2'></div>");
+                }
+                if(l.type == 3){
+                    $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame3'></div>");
+                }
+                $("#equipment_"+l.slot).removeClass("item-"+l.id);
+                $("#equipment_"+l.slot).removeClass("item-type-"+l.type);
+                $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px;position:absolute;' class = 'equipment item item-"+l.id+"'></div>");
+                if(l.count != 1){
+                    $("#equipment_"+l.slot).append("<div style = 'pointer-events:none;top:0px;left:0px;position:absolute;' class = 'equipment item'>"+l.count+"</div>");
+                }
+            }
+            break;
+        case 'container':
+            for(var m of data.container){
+                $("#item_"+m.slot)[0].innerHTML = "";
+                if(m.type == 0){
+                    $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame0'></div>");
+                }
+                if(m.type == 1){
+                    $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame1'></div>");
+                }
+                if(m.type == 2){
+                    $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame2'></div>");
+                }
+                if(m.type == 3){
+                    $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item frame3'></div>");
+                }
+                $("#item_"+m.slot).removeClass("item-"+m.id);
+                $("#item_"+m.slot).removeClass("item-type-"+m.type);
+                $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item item-"+m.id+"'></div>");
+                if(m.count != 1){
+                    $("#item_"+m.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'equipment item'>"+m.count+"</div>");
+                }
+            }
+            break;
+        case 'shop_window':
+            for(var n of data.backpack){
+                $(".container-backpack#item_"+n.slot)[0].innerHTML = "";
+                if(n.type == 0){
+                    $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item frame0'></div>");
+                }
+                if(n.type == 1){
+                    $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item frame1'></div>");
+                }
+                if(n.type == 2){
+                    $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item frame2'></div>");
+                }
+                if(n.type == 3){
+                    $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item frame3'></div>");
+                }
+                $(".container-backpack#item_"+n.slot).removeClass("item-"+n.id);
+                $(".container-backpack#item_"+n.slot).removeClass("item-type-"+n.type);
+                $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item item-"+n.id+"'></div>");
+                if(n.count != 1){
+                    $(".container-backpack#item_"+n.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack equipment item'>"+n.count+"</div>");
+                }
+            }
+            for(var o of data.backpack_level){
+                $(".container-backpack_level#item_"+o.slot)[0].innerHTML = "";
+                if(o.type == 0){
+                    $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item frame0'></div>");
+                }
+                if(o.type == 1){
+                    $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item frame1'></div>");
+                }
+                if(o.type == 2){
+                    $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item frame2'></div>");
+                }
+                if(o.type == 3){
+                    $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item frame3'></div>");
+                }
+                $(".container-backpack_level#item_"+o.slot).removeClass("item-"+o.id);
+                $(".container-backpack_level#item_"+o.slot).removeClass("item-type-"+o.type);
+                $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item item-"+o.id+"'></div>");
+                if(o.count != 1){
+                    $(".container-backpack_level#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-backpack_level equipment item'>"+o.count+"</div>");
+                }
+            }
+            for(var p of data.premium){
+                $(".container-premium#item_"+p.slot)[0].innerHTML = "";
+                if(p.type == 0){
+                    $(".container-premium#item_"+p.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item frame0'></div>");
+                }
+                if(p.type == 1){
+                    $(".container-premium#item_"+p.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item frame1'></div>");
+                }
+                if(p.type == 2){
+                    $(".container-premium#item_"+p.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item frame2'></div>");
+                }
+                if(p.type == 3){
+                    $(".container-premium#item_"+p.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item frame3'></div>");
+                }
+                $(".container-premium#item_"+p.slot).removeClass("item-"+p.id);
+                $(".container-premium#item_"+p.slot).removeClass("item-type-"+p.type);
+                $(".container-premium#item_"+p.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item item-"+p.id+"'></div>");
+                if(p.count != 1){
+                    $(".container-premium#item_"+o.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'container-premium equipment item'>"+p.count+"</div>");
+                }
+            }
+            break;
+        case 'auction':
+            if("items" in data){
+                for(var r of data.items){
+                    $("#auction_item_"+r.id)[0].innerHTML = "";
+                    if(r.type == 0){
+                        $("#auction_item_"+r.id).append("<div style = 'position:absolute;pointer-events:none;top:0px;left:0px' class = 'item frame0'></div>");
+                    }
+                    if(r.type == 1){
+                        $("#auction_item_"+r.id).append("<div style = 'position:absolute;pointer-events:none;top:0px;left:0px' class = 'item frame1'></div>");
+                    }
+                    if(r.type == 2){
+                        $("#auction_item_"+r.id).append("<div style = 'position:absolute;pointer-events:none;top:0px;left:0px' class = 'item frame2'></div>");
+                    }
+                    if(r.type == 3){
+                        $("#auction_item_"+r.id).append("<div style = 'position:absolute;pointer-events:none;top:0px;left:0px' class = 'item frame3'></div>");
+                    }
+                    $("#auction_item_"+r.id).removeClass("item-"+r.id);
+                    $("#auction_item_"+r.id).removeClass("item-type-"+r.type);
+                    $("#auction_item_"+r.id).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item item-"+r.item_id+"'></div>");
+                    if(r.count != 1){
+                        $("#auction_item_"+r.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+r.count+"</div>");
+                    }
+                }
+            }
+            if("backpack" in data) createFrame('shop_window', data);
+            if("action" in data && data.action == "history"){
+                for(var q of data.list.current){
+                    $("#auction_item_"+q.id)[0].innerHTML = "";
+                    if(q.type == 0){
+                        $("#auction_item_"+q.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame0'></div>");
+                    }
+                    if(q.type == 1){
+                        $("#auction_item_"+q.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame1'></div>");
+                    }
+                    if(q.type == 2){
+                        $("#auction_item_"+q.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame2'></div>");
+                    }
+                    if(q.type == 3){
+                        $("#auction_item_"+q.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame3'></div>");
+                    }
+                    $("#auction_item_"+q.id).removeClass("item-"+q.item_id);
+                    $("#auction_item_"+q.id).removeClass("item-type-"+q.type);
+                    $("#auction_item_"+q.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item item-"+q.item_id+"'></div>");
+                    if(q.count != 1){
+                        $("#auction_item_"+q.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+q.count+"</div>");
+                    }
+                }
+            }
+            break;
+        case 'loot':
+            for(var u of data){
+                $("#loot-item-"+u.id)[0].innerHTML = "";
+                if(u.type == 0){
+                    $("#loot-item-"+u.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame0'></div>");
+                }
+                if(u.type == 1){
+                    $("#loot-item-"+u.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame1'></div>");
+                }
+                if(u.type == 2){
+                    $("#loot-item-"+u.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame2'></div>");
+                }
+                if(u.type == 3){
+                    $("#loot-item-"+u.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item frame3'></div>");
+                }
+                $("#loot-item-"+u.id).removeClass("item-"+u.id);
+                $("#loot-item-"+u.id).removeClass("item-type-"+u.type);
+                $("#loot-item-"+u.id).append("<div style = 'position:absolute;pointer-events:none;' class = 'item item-"+u.id+"'></div>");
+                if(u.count != 1){
+                    $("#loot-item-"+u.slot).append("<div style = 'pointer-events:none;top:0px;left:0px' class = 'item'>"+u.count+"</div>");
+                }
+            }
+            break;
+    }
+}
+var sLW = window.player.showLootWindow;
+window.player.showLootWindow = function(data, remove){
+    sLW(data, remove);
+    console.log(data);
+    createFrame('loot', data);
+}
+var gsP = window.game.sendPacket;
+window.game.sendPacket = function(code, data){
+    console.log(code, data);
+    gsP(code, data);
+}
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    //console.log(data.code);
+    pSP(data);
+    if(data.code == 'depo_window'){
+        createFrame('depo', data);
+    }
+    if(data.code == 4){
+        createFrame('backpack', data);
+    }
+    if(data.code == 'player_backpack'){
+        //console.log(data);
+        createFrame('depo', data, 1);
+    }
+    if(data.code == 'container'){
+        createFrame('container', data);
+    }
+    if(data.code == 'shop_window' || data.code == 'sell_items' || data.code == 'buy_items' || data.code == 'auction_window'){
+        //console.log(data);
+        createFrame('shop_window', data);
+    }
+    if(data.code == 'auction'){
+        //console.log(data);
+        createFrame('auction', data);
+    }
+    //if(data.code == 'auction_window'){createFrame('shop_window', data);}if(data.code == 'sell_items' || data.code == 'buy_items'){createFrame('shop_window', data);}
+}
+var wsC = window.npc.shopContainer;
+window.npc.shopContainer = function(type){
+    wsC(type);
+    //createFrame('backpack_update', type);
+
+}*/
