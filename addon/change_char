@@ -1,0 +1,293 @@
+// ==UserScript==
+// @name         a0_alkatria_change_char
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         none
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+//ustawienia do poprawy, dodanie listenera dla domyslnych i takie tam, na razie ok.
+
+(function() {
+var addonName = 'change_character';//zmienne
+var description = ['Zmiana postaci', 'Dodatek służy do szybkiej zmiany postaci z pomocą przypiętego na dole paska. W ustawieniach mamy możliwość zmiany ilości postaci, które naraz mają się wyświetlać. Jeśli nasza ilość postaci jest większa niż ustawiony limit - pojawi się button do pokazania kolejnych.'];
+var defaultSettings = {sort: 0, last_update: 0, character_list: [], max_in_one_line: 9};//zmienne
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+var actualCharacter = -1;
+const oldLoad = window.map.recFirstMesage;
+window.map.recFirstMesage = function (data) {
+    oldLoad.apply(this, arguments);
+    if(window.player.id != 0 ) actualCharacter = window.player.id;
+    var character_list = $(".server_current").children();
+    for(var i of character_list){
+        if(i.dataset.id == actualCharacter){
+            i.classList.add("current_character_actual");
+        }
+    }
+}
+
+function init(){
+    if(!("max_in_one_line" in settings)){
+        window.NarelsAPI.resetSettings(addonName, defaultSettings);
+    }
+    if(Date.now() - settings.last_update > 10800 * 10 **3){
+        $.ajax({
+            type: 'GET',
+            url: 'https://alkatria.pl/modal/get/player-select',
+            async: true,
+            data: {},
+            success: function(data){
+                parseData(data);
+            },
+            error: function(info) {
+                sortByServer();
+            }
+        });
+    }else{
+        sortByServer();
+    }
+}
+function parseData(data){
+    settings.character_list = [];
+    settings.last_update = Date.now();
+    const parser = new DOMParser();
+    const htmlDoc = parser.parseFromString(data, 'text/html');
+    var arr = htmlDoc.getElementsByClassName("player-tr");
+    for(var a = 0; a < arr.length; a++){
+        var action = arr[a].attributes.onclick.textContent;
+        settings.character_list.push({
+            action : arr[a].attributes.onclick.textContent,
+            playerID: action.slice(action.lastIndexOf('/') + 1, action.lastIndexOf("'"))
+        });
+        for(var b = 0; b < arr[a].cells.length; b++){
+            switch(b){
+                case 0:
+                    settings.character_list[a].img = arr[a].cells[b].lastChild.lastChild.lastChild.src;
+                    break;
+                case 1:
+                    settings.character_list[a].nick = arr[a].cells[b].outerText;
+                    break;
+                case 2:
+                    settings.character_list[a].prof = arr[a].cells[b].outerText;
+                    break;
+                case 3:
+                    settings.character_list[a].server = arr[a].cells[b].outerText;
+                    break;
+            }
+        }
+    }
+    window.NarelsAPI.saveSettings(addonName, settings);
+    sortByServer();
+}
+function sortByServer (){
+   /* var cp = (JSON.parse(JSON.stringify(settings.character_list[0])));
+    cp.nick = "Narels";
+    cp.server = "cwsd";
+    settings.character_list.push(cp);
+    cp.nick = "Narels";
+    cp.server = "cwsd";
+        settings.character_list.push(cp);
+        settings.character_list.push(cp);
+        settings.character_list.push(cp);
+        settings.character_list.push(cp);
+        settings.character_list.push(cp);
+        settings.character_list.push(cp);
+            settings.character_list.push(cp);
+            settings.character_list.push(cp);
+            settings.character_list.push(cp);
+            settings.character_list.push(cp);
+            settings.character_list.push(cp);
+            settings.character_list.push(cp);*/
+    var server = document.title.substring(document.title.lastIndexOf("::") + 3);
+    console.log(server);
+    var server_list = settings.character_list.map(function (el) {return el.server;});
+    console.log(server_list);
+    server_list = server_list.filter(function(item, pos) {return server_list.indexOf(item) == pos;})
+    server_list.forEach(function(item, i){if(item === server){server_list.splice(i, 1);server_list.push(item);}});
+    console.log(server_list, server);
+    console.log(JSON.parse(JSON.stringify(settings.character_list)));
+    console.log(settings.sort);
+    switch(settings.sort){
+        case 0:
+            console.log('dupa0')
+            settings.character_list.sort((a, b) => parseInt(b.nick.substring(b.nick.indexOf("(") + 1, b.nick.length -1)) - parseInt(a.nick.substring(a.nick.indexOf("(") + 1, a.nick.length -1)));
+            break;
+        case 1:
+            console.log('dupa0')
+            settings.character_list.sort((a, b) => parseInt(a.playerID) - parseInt(b.playerID));
+            break;
+        case 2:
+            console.log('dupa0')
+            settings.character_list.sort((a, b) => (a.nick > b.nick) ? 1 : -1)
+            break;
+    }
+    console.log(JSON.parse(JSON.stringify(settings.character_list)));
+    createChangeMenu(server_list);
+}
+function createChangeMenu(server_list){
+   /* settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);
+        settings.character_list.push(settings.character_list[0]);
+    settings.character_list.push(settings.character_list[0]);*/
+    $(".menu-right-content")[0].style.zIndex = 1;
+    $(`<div id = "character_box" style = "
+    position: absolute;
+    top: -50px;
+    left: 20px;
+    width: max-content;
+    height: auto;
+    z-index: 0;
+    ">
+</div`).appendTo(".menu-right-content");
+    for(var j of server_list){
+        var licznik_postaci = 0;
+$(`<div class = "${j == server_list[server_list.length - 1] ? "server_current" : "server_optional"}" id = "character_${j}" style = "display: ${j == server_list[server_list.length - 1] ? "block" : "none"};top:${server_list.indexOf(j) * -32 + "px"}"</div>`).appendTo("#character_box");
+        for(var i of settings.character_list){
+            if(i.server != j) continue;
+    $(`<div data-id = "${i.playerID}" class = "character_list_${i.server}_${licznik_postaci < parseInt(settings.max_in_one_line) ? 0 : licznik_postaci < parseInt(settings.max_in_one_line) * 2 ? 1 : licznik_postaci < parseInt(settings.max_in_one_line) * 3 ? 2 : licznik_postaci < parseInt(settings.max_in_one_line) * 4 ? 3 : 4} ${i.server}" data-tip = "${i.nick}<br>${i.server}" style = "
+    background:url(${i.img});
+    color: black;
+    width: 32px;
+    height: 32px;
+    display: ${licznik_postaci < parseInt(settings.max_in_one_line) ? "inline-block" : "none"};
+    transform: scale(1.2);
+    "
+    onclick = "change_character(${i.playerID})"
+    >
+    </div`).appendTo("#character_"+j).mouseenter(function(){
+        this.classList.add("current_character");
+    }).mouseleave(function(){
+        this.classList.remove("current_character");
+    })
+            licznik_postaci++;
+            if(licznik_postaci > parseInt(settings.max_in_one_line) && !$("#show_next_"+i.server).length){
+                $(`<div id = "show_next_${i.server}" data-current = "0" class = "${i.server}" style = "
+                   background: url(https://alkatria.pl/templates/client/default/images/ui/icon_menu_more.png) no-repeat;
+                   width: 25px;
+                   cursor: pointer;
+                   position:relative;
+                   top:4px;
+                   height: 22px;
+                   float: right;
+                   transform: scale(1.2);
+                   ">
+                   </div>`).appendTo("#character_"+i.server).on('click', function (event) {
+                    var attr_value = parseInt($(this).attr('data-current'));
+                    $(".character_list_"+ $(this).attr('class')+"_"+attr_value).each(function() {
+                        $(this).css('display', 'none');
+                    });
+                    if($(".character_list_"+ $(this).attr('class')+"_"+(attr_value + 1)).length){
+                        attr_value ++;
+                        $(this).attr('data-current', attr_value);
+                    }else{
+                        attr_value = 0;
+                        $(this).attr('data-current', attr_value);
+                    }
+                    $(".character_list_"+ $(this).attr('class')+"_"+attr_value).each(function() {
+                        $(this).css('display', 'inline-block');
+                    });
+                });
+            }
+        }
+    }
+    if(server_list.length > 1){
+        $(`<div id = "showMore" style = "
+        background: url(https://alkatria.pl/templates/client/default/images/tracker/hide_n.png);
+        width: 22px;
+        cursor: pointer;
+        height: 22px;
+        float: right;
+        left:25px;
+        position:relative;
+        top:-20px;
+        transform: scale(1.5);
+        ">
+        </div>`).appendTo("#character_box")/*appendTo("#character_"+server_list[server_list.length - 1])*/.on('click', function () {
+            var s = $(".server_optional");
+            if(s.length){
+                var show = s[0].style.display == "block" ? "none" : "block";
+                var shift = show == "block" ? -50 + (-36 * s.length) : -50;
+                for(var i of s){
+                    i.style.display = show;
+                }
+            }
+            var transform = $("#showMore")[0].style.transform;
+            transform = transform.substring(transform.indexOf("(") + 1, transform.indexOf(")"));
+            transform = parseFloat(transform) * -1;
+            $("#showMore")[0].style.transform = "scale("+transform+")";
+            $("#character_box")[0].style.top = shift + "px";
+        });
+    }
+}
+        $(`<style>.current_character {filter: drop-shadow(red 0px 0px 10px)}</style>`).appendTo("head");
+        $(`<style>.current_character_actual {filter: drop-shadow(#4444dd 0px 0px 8px) !important}</style>`).appendTo("head");
+window.change_character = function(action){
+    if(window.player.id != action){
+        var s = settings.character_list.find(o => o.playerID == action);
+        if(s != -1) window.location.replace('/game/login/' + s.playerID);
+    }
+}
+
+
+window.reset_default_change_character = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_change_character = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+       Wybierz sposób sortowania:</br>
+
+         <input type="radio" name="sort" value="0" ${settings.sort == 0 ? "checked" : ""}>Według poziomu - domyślnie
+         <div class = "clear mB5"></div>
+         <input type="radio" name="sort" value ="1" ${settings.sort == 1 ? "checked" : ""}>Według daty utworzenia
+         <div class = "clear mB5"></div>
+         <input type="radio" name="sort" value = "2" ${settings.sort == 2 ? "checked" : ""}>Według nicku
+         <div class = "clear mB5"></div>
+         Ile postaci ma znajdować się w linii: <input required type = "text" pattern = "([3-9]|1[0-9]|2[0-5])" class="form-input" placeholder = "Min. 3" style="width:70px" name = "max_in_one_line" ${settings.max_in_one_line ? 'value="'+settings.max_in_one_line+'"' : ""}>
+         <div class = "clear mB5"></div>
+          <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_change_character();
+        })
+    };
+}
+init();
+})();
