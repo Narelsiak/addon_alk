@@ -1,0 +1,217 @@
+// ==UserScript==
+// @name         a6_quick_sell
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function() {
+    var addonName = 'quick_sell';
+    var description = ['Szybka sprzedaż', 'Dodatek pozwala w szybki sposób sprzedawać przedmioty, które zalegają nam w torbie. Sprzedawane są przedmioty zwykłe oraz przedmioty bezużyteczne. <br>'+
+                       'Sprzedawać można podczas rozmowy z handlarzem z użyciem klawisza  "r" lub z pomocą przycisku znajdującego się po prawej stronie okna.<br>'+
+                       'Przyciśnięcie prawego klawisza na przedmiot w torbie podczas handlu blokuje go przed sprzedażą. Odblokowujemy ponownie naciskając prawy klawisz. Przedmioty są blokowane osobno na każdej postaci. Zmiana jego położenia w torbie usuwa blokadę.<br>'+
+                       '<center><strong>Wersja beta, proszę o sprawdzanie przedmiotów, które zostały dodane do okna!<br>Propozycje zmiany, przedmioty do dodania jako wyjątek przyjmuje na discordzie: Narels(Michał)#0672</strong></center>']
+    var defaultSettings = {blocked_list: {}, enter_sell: 0, backpack_sell: 1, backpack_level_sell: 1, backpack_premium_sell: 1, black_list: []};//zmienne
+    var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+    //var array_to_ignore = ["Materiał uzyskany", "Materiał pozyskany", "Przedmiot metalurgiczny", "do ulepszania", "Teleportuje", "potrzebny do", "wykopać skarb", "ściąć"];
+    var array_to_ignore = [];
+    var array_to_sell = [];
+    //$(`<style>.blocked_item {filter: drop-shadow(white 0px 0px 10px)!important}</style>`).appendTo("head");
+    $(`<style>.blocked_item {box-shadow: inset 0 0 4px 2.5px white !important}</style>`).appendTo("head");
+
+$(document).keydown(function(event) {
+    if (event.which == 82 && $(".window-shop").length && event.target.tagName!="TEXTAREA" && event.target.tagName!='INPUT'){
+        sell();
+    }
+    if (event.which == 13 && $(".window-shop").length && event.target.tagName!="TEXTAREA" && event.target.tagName!='INPUT' && settings.enter_sell){
+        window.npc.tradeSend(2);
+    }
+});
+function sell(){
+    var item = $("#plecak").children();
+    if(item.length){
+        for(var i = 0; i < item.length;i++){
+            if((i == 0 && settings.backpack_sell == 0) || (i == 1 && settings.backpack_level_sell == 0) || (i == 2 && settings.backpack_premium_sell == 0)) continue;
+            var item_c = item[i].children;
+            for(var j of item_c){
+                if($(j).attr("data-tip-type") == 0 && arrayCheck($(j).attr("data-tip"), $(j)[0].classList, $(j).attr("data-tip-type"), $(j).attr("data-name")) && !$(j).hasClass("blocked_item") && $(j).attr("data-price") != 1 && $(j).attr("data-price") != undefined
+                   && !$(j).hasClass("shop-offer-selected")
+                   //&& $(j).attr("data-slot-type") != 15 && $(j).attr("data-slot-type") != 10 //data-slot-type < 10 ?
+                  ){
+                    array_to_sell.push({container: $(j).attr("data-container"), place: $(j).attr("data-slot")});
+                }
+            }
+        }
+        trySell();
+    }
+}
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    pSP(data);
+    //console.log(data);
+    if(data.code == 'shop_window'){
+        if(window.player.id in settings.blocked_list){
+            for(var i of settings.blocked_list[window.player.id].data){
+                console.log(i);
+                const item = document.querySelectorAll(`[data-name='${i.name}'][data-slot='${i.slot}'][data-container='${i.backpack}']`)
+                for(var j of item){
+                    j.classList.add("blocked_item");
+                }
+                if(item.length == 0) {
+                    settings.blocked_list[window.player.id].data.splice(i, 1);
+                    window.NarelsAPI.saveSettings(addonName, settings);
+                }
+            }
+        }
+        console.log($(".window-shop"));
+        $(`<div id = "quick_sell_button" data-tip="Quick sell" style = "cursor:pointer;opacity:0.9;font-size: 30px;text-align:center;background:grey;border:1px solid black; color: white; font-family:Arial, sans-serif; height:32px;line-height:32px;position:absolute;width:32px;left:500px;top:205px;">S</div>`).appendTo(".window-shop");
+        $("#quick_sell_button")[0].addEventListener("click", e => {
+            sell();
+        })
+        $(".backpack-item,container-backpack").on("contextmenu", function(e) {
+            if($(this).hasClass("blocked_item")){
+                $(this).removeClass("blocked_item");
+                if(window.player.id in settings.blocked_list){
+                    //const index = settings.blocked_list[window.player.id].data[name].indexOf($(this).attr("data-name"));
+                    var index = settings.blocked_list[window.player.id].data.findIndex(x => x.name == $(this).attr("data-name"));
+                    console.log(index);
+                    if(index != -1) settings.blocked_list[window.player.id].data.splice(index, 1);
+                }
+            }else{
+                $(this).addClass("blocked_item");
+                console.log($(this).attr("data-name"), $(this).attr("data-slot"));
+                if(window.player.id in settings.blocked_list){
+                    if(settings.blocked_list[window.player.id].data.indexOf($(this).attr("data-name")) != -1) return;
+                    settings.blocked_list[window.player.id].data.push({name: $(this).attr("data-name"), slot: $(this).attr("data-slot"), backpack: $(this).attr("data-container")});
+                }else{
+                    var object = {id: window.player.id, data: []};
+                    settings.blocked_list[window.player.id] = object;
+                    settings.blocked_list[window.player.id].data.push({name: $(this).attr("data-name"), slot: $(this).attr("data-slot"), backpack: $(this).attr("data-container")});
+                }
+            }
+            window.NarelsAPI.saveSettings(addonName, settings);
+        });
+    }
+}
+const sleep = (ms) => {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+async function trySell(){
+    for(var i of array_to_sell){
+        console.log(i);
+        if($('.item-sell-list,item-shopoffer').children().length >= 10) {
+            array_to_sell = [];
+            return;
+        }
+        window.npc.selectSellItem(parseInt(i.place), i.container);
+        await sleep(75);
+    }
+    array_to_sell = [];
+}
+function arrayCheck(tip, classes, rar, name){
+    name = name.toLowerCase();
+    for(var i of settings.black_list){
+        if(name.includes(i)) return false;
+    }
+    for(var j of classes){
+        if(j.includes("item-class-")){
+            var s = j;
+            j = j.substring(s.lastIndexOf('-') + 1);
+            if(j > 9 || (j == 8 && rar != 0)) return false;
+        }
+    }
+    return true;
+}
+
+window.reset_default__quick_sell = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+
+window.showMenu_quick_sell = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+
+         <input id = "option_1" name = "enter_sell" class="settings-checkbox" type="checkbox" ${settings.enter_sell == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Sprzedawaj używając entera </div></label>
+      <div class = "clear mB5"></div>
+      <div class = "clear mB5"></div>
+Torby, z których przedmioty będą sprzedawane:
+      <div class = "clear mB5"></div>
+         <input id = "option_2" name = "backpack_sell" class="settings-checkbox" type="checkbox" ${settings.backpack_sell == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Plecak główny </div></label>
+         <input id = "option_3" name = "backpack_level_sell" class="settings-checkbox" type="checkbox" ${settings.backpack_level_sell == 1 ? "checked" : ""}>
+         <label for = "option_3" style = "position:absolute;left:200px"><div class = "label-checkbox"> Plecak levelowy </div></label>
+         <input id = "option_4" name = "backpack_premium_sell" class="settings-checkbox" type="checkbox" ${settings.backpack_premium_sell == 1 ? "checked" : ""}>
+         <label for = "option_4" style = "position:absolute;left:400px"><div class = "label-checkbox"> Plecak premium </div></label>
+            <div class = "clear mB5"></div>
+
+      </form>
+      Czarna lista oznacza, że przedmioty posiadające podaną nazwę lub jej fragment nie zostaną sprzedane(bez uwzględnienia wielkości znaków).
+                  <div class = "clear mB5"></div>
+
+Dodaj do czarnej listy: <input id = "list_append" type = "text" class="form-input" placeholder = "nazwa przedmiotu lub jej fragment" style="width: 400px"}>
+ <div id = "append_to_list" class ="absolute mL60 button-1 overlock font-20" style ;">Dodaj</div>
+            <div class = "clear mB5"></div>
+
+ <div id = "show_list" class ="absolute mL60 button-1 overlock font-20" style ;">Lista</div>
+ <div id = "clearList" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Wyczysc liste</div>
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_quick_sell();
+        })
+    };
+    if($("#append_to_list").length){
+        $("#append_to_list")[0].addEventListener("click", e => {
+            var txt = $("#list_append").val();
+            if(txt == undefined || txt == "" || settings.black_list.indexOf(txt.toLowerCase()) != -1) return;
+            console.log(settings.black_list);
+            settings.black_list.push(txt.toLowerCase());
+            $("#list_append").val("")
+            window.NarelsAPI.saveSettings(addonName, settings);
+            window.game.broadCast("<span style = 'color:white'>Dodano: '" +txt.toLowerCase()+"' do czarnej listy</span>", 15000);
+        })
+    }
+    if($("#show_list").length){
+        $("#show_list")[0].addEventListener("click", e => {
+            var str = "";
+            if(settings.black_list.length == 0) return window.game.broadCast("<span style = 'color:#ff6666'>Lista jest pusta</span>", 15000);
+            for(var i of settings.black_list){
+                str+= i;
+                str+=", ";
+            }
+            alert("Lista: " + str);
+        })
+    }
+    if($("#clearList").length){
+        $("#clearList")[0].addEventListener("click", e => {
+            settings.black_list = [];
+            window.NarelsAPI.saveSettings(addonName, settings);
+            window.game.broadCast("<span style = 'color:#ff6666'>Wyczyszczono czarną listę</span>", 15000);
+        })
+    }
+}
+})();
