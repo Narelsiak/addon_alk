@@ -1,0 +1,185 @@
+// ==UserScript==
+// @name         a3_alkatria_prevention_destroy_loot
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function() {
+    var addonName = 'prevent_destroy';//zmienne
+    var description = ['Zabezpieczacz łupu', 'Dodatek służy do zabezpieczenia łupu w oknie przed przypadkowym zniszczeniem, o legendarne i mityczne pyta zawsze, wybranie opcji nie wrzuca automatycznie przedmiot do torby.'];
+    var defaultSettings = {ignore_cristal: 0, ignore_rare: 0, ignore_epic: 0};//zmienne
+    var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+
+    var item_to_ask = [];
+    var current_item;
+    var sendP = window.game.sendPacket;
+    window.game.sendPacket = function(code, data){
+        console.log(code, data);
+        if(code == 18){
+            console.log(code, data);
+            for(var i in item_to_ask){
+                if(item_to_ask[i].index == data.action && data.remove == 1){
+                    console.log(code, data);
+                    current_item = item_to_ask[i];
+                    $(`<div id = "modal-question">
+                      <div class="window-3-heading">
+                      <div class="title-label overlock font-20"> Uwaga!</div>
+                      </div>
+                      <div class = "window-small">
+                      <span class="overlock font-20 question-text">
+                      Czy na pewno chcesz zniszczyć przedmiot <strong>${item_to_ask[i].rarity}</strong> - <br>
+                      <center>${item_to_ask[i].name}</center>
+                      </span>
+                      <br><br>
+                      <div id = "loot_destroy" class="button-2 overlock font-16">Tak</div>
+                      <div id = "loot_not_destroy"class="button-2 overlock font-16">Nie</div>
+                      </div>
+                      </div>`).appendTo("#game");
+                        if($("#loot_destroy").length){$("#loot_destroy")[0].addEventListener("click", e=>{
+                            window.game.sendPacket(18, {action:current_item.index, remove: 1});
+                            $("#modal-question").remove();
+                        })};
+                        if($("#loot_not_destroy").length){$("#loot_not_destroy")[0].addEventListener("click", e=>{
+                            window.game.sendPacket(18, {action:current_item.index, remove: 0});
+                            $("#modal-question").remove();
+                        })};
+                    item_to_ask.splice(i, 1);
+                    return;
+                }else if(item_to_ask[i].index == data.action && data.remove == 0){
+                    var ind = item_to_ask.map(e => e.index).indexOf(data.action)
+                    if(ind != -1) item_to_ask.splice(ind, 1);
+                    console.log(item_to_ask);
+                }
+            }
+        }
+        if(code == 1084 && item_to_ask.length){
+            const node = document.getElementById("lootBag");
+            const clone = node.cloneNode(true);
+            $(`<div id = "modal-question">
+                      <div class="window-3-heading">
+                      <div class="title-label overlock font-20"> Uwaga!</div>
+                      </div>
+                      <div class = "window-small">
+                      <span class="overlock font-20 question-text">
+                      Czy na pewno chcesz zniszczyć przedmiot <strong>wszystkie przedmioty z okna łupu?</strong> <br>
+                      </span>
+                      <br><br>
+                      <div id = "loot_destroy" class="button-2 overlock font-16">Tak</div>
+                      <div id = "loot_not_destroy"class="button-2 overlock font-16">Nie</div>
+                      </div>
+                      </div>`).appendTo("#game");
+                        if($("#loot_destroy").length){$("#loot_destroy")[0].addEventListener("click", e=>{
+                            item_to_ask = [];
+                            window.game.sendPacket(1084, {});
+                            $("#modal-question").remove();
+                        })};
+                        if($("#loot_not_destroy").length){$("#loot_not_destroy")[0].addEventListener("click", e=>{
+                            $("#game").append(clone);
+                            $("#modal-question").remove();
+                        })};
+            return;
+        }
+        sendP(code, data);
+    }
+
+var p = window.player.showLootWindow;
+window.player.showLootWindow = function(data, remove){
+    console.log(data, remove);
+    if(data.length > 0){
+        for(var i of data){
+            if(i.name.includes("Kryształ Rzemieślnika") && settings.ignore_cristal == 1) continue;
+            switch(i.type){
+                case 1:
+                    if(settings.ignore_rare == 1 || item_to_ask.map(e => e.index).indexOf(i.index) != -1) break;
+                    item_to_ask.push({index: i.index, name: i.name, rarity: getRar(i.type)});
+                    break;
+                case 2:
+                    if(settings.ignore_epic == 1 || item_to_ask.map(e => e.index).indexOf(i.index) != -1) break;
+                    item_to_ask.push({index: i.index, name: i.name, rarity: getRar(i.type)});
+                    break;
+                case 3:
+                    if(item_to_ask.map(e => e.index).indexOf(i.index) != -1) break;
+                    item_to_ask.push({index: i.index, name: i.name, rarity: getRar(i.type)});
+                    break;
+                case 4:
+                    if(item_to_ask.map(e => e.index).indexOf(i.index) != -1 ) break;
+                    item_to_ask.push({index: i.index, name: i.name, rarity: getRar(i.type)});
+                    break;
+            }
+            /*if(i.type > 0 && item_to_ask.map(e => e.index).indexOf(i.index) == -1){
+                item_to_ask.push({index: i.index, name: i.name, rarity: getRar(i.type)});
+            }*/
+        }
+    }
+    if(remove != undefined && remove.length > 0){
+        for(var j of remove){
+            var ind = item_to_ask.map(e => e.index).indexOf(j.index)
+            if(ind != -1) item_to_ask.splice(ind, 1);
+            if(ind != -1) console.log(ind);
+        }
+    }
+    console.log(item_to_ask, "!!!!");
+    p(data, remove);
+}
+function getRar(type){
+    switch(type){
+        case 1:
+            return 'Rzadki';
+        case 2:
+            return 'Epicki';
+        case 3:
+            return 'Legendarny';
+        case 4:
+            return 'Mityczny';
+    }
+}
+window.reset_default_prevent_destroy = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_prevent_destroy = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+
+         <input id = "option_1" name = "ignore_cristal" class="settings-checkbox" type="checkbox" ${settings.ignore_cristal == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Niszcz kryształy bez pytania </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_2" name = "ignore_rare" class="settings-checkbox" type="checkbox" ${settings.ignore_rare == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Niszcz przedmioty rzadkie bez pytania </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_3" name = "ignore_epic" class="settings-checkbox" type="checkbox" ${settings.ignore_epic == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Niszcz przedmioty epickie bez pytania </div></label>
+         <div class = "clear mB5"></div>
+
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_prevent_destroy();
+        })
+    };
+}
+
+})();
