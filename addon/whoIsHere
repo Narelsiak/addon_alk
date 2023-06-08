@@ -1,0 +1,217 @@
+// ==UserScript==
+// @name         a8_alkatria_whoishere
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         none
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function() {
+var addonName = 'players_on_map';
+var description = ['Gracze na mapie', 'Dodatek '];
+var defaultSettings = {last_clan_check: {}, friends: {}, clan: {}, enemy: {}, clan_enemy: {}, posX: 0, posY: 200, roll_hide: 0, sort: 0, friends_color: "", clan_color: "", enemy_color: "", clan_enemy_color: "", group_color: ""};
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+var edit_position = 0;
+var players = [];
+var map_name = 'nothing';
+var group_members = [];
+var last_check = 0;
+$(`<div id = "who_is_here" class="modal" style = "border: 1px groove grey;border-radius: 5px 5px 0 0;z-index: 500;left:${settings.posX}px;top: ${settings.posY}px;width: 200px; height:23px;background-color: rgba(0, 0, 0, 0.5);position:absolute;">
+  <div class = "who_is_header" style = "color:white;font-size: 20px;">Graczy na mapie: </div>
+  <div id = "who_is_counter" style = "position:absolute;top:0px;left:145px;color:white;font-size: 20px;">0</div>
+  <div id = "who_is_content" style = "border-radius: 0 0 5px 5px;color:white;background-color: rgba(0, 0, 0, 0.5);"></div>
+  <div id = "who_is_here_hide" style="${settings.roll_hide == 1 ? 'scale: -1;' : ""}top:0px;left:175px;cursor:pointer;position:absolute;width:21px;height:23px;background-image: url('https://alkatria.pl/templates/client/default/images/tracker/hide_n.png');"></div>
+</div>`).appendTo("#game");
+    $("#who_is_here").on("contextmenu", function(e) {
+    if(edit_position == 0){
+        $("#who_is_here").addClass("draggable");
+        $("#who_is_here").css("cursor", "grab");
+        edit_position = 2;
+        window.game.broadCast("Pozycja odblokowana", 10000);
+        setTimeout(() => {edit_position = 1}, 250);
+    }else if(edit_position == 1){
+        edit_position = 2;
+        $("#who_is_here").removeClass("draggable");
+        $("#who_is_here").css("cursor", "");
+        settings.posX = $(this).offset().left;
+        settings.posY = $(this).offset().top;
+        window.NarelsAPI.saveSettings(addonName, settings);
+        window.game.broadCast("Pozycja zablokowana i zapisana", 10000);
+        setTimeout(() => {edit_position = 0}, 250);
+    }
+});
+
+$("#who_is_here_hide").on( "click", function() {
+    if(settings.roll_hide == 0){
+        $(".who_is_here_child").hide();
+        settings.roll_hide = 1;
+        $("#who_is_here_hide").css("scale", "-1");
+        window.NarelsAPI.saveSettings(addonName, settings);
+    }
+    else{
+        $(".who_is_here_child").show();
+        settings.roll_hide = 0;
+        $("#who_is_here_hide").css("scale", "1");
+        window.NarelsAPI.saveSettings(addonName, settings);
+    }
+});
+setTimeout(() => {
+    if(!(window.player.id in settings.last_clan_check) || Date.now() - settings.last_clan_check[window.player.id] > 3600 * 10**3){
+        settings.last_clan_check[window.player.id] = 0;
+        window.game.sendPacket("clans", {action: "myclan"});
+        window.game.sendPacket("friends", {});
+}}, 3000);//add
+
+setInterval(function (){
+    if(Date.now - last_check > 1000 || (Object.keys(window.game.players).length != players.length)) {
+        //refreshList();
+        updateList();
+    }
+}, 1000);
+function refreshList(){
+    players = [];
+    for(var i in window.game.players){
+        //players.push({nick: window.game.players[i].name, level: window.game.players[i].level, prof: data.profession == 1 ? "m" : data.profession == 2 ? "w" : "h", id: data.id, rel: checkRelation(data.id, data.clan), clan: data.clan});
+    }
+
+}
+function updateList(){
+    last_check = Date.now();
+    $('#who_is_content').empty();
+    for(var i of players){
+        if(!window.game.players[i.id]) {players.splice(i, 1); continue;}
+        i.rel = checkRelation(i.id, i.clan);
+        $("#who_is_content").append("<div style = '"+(i.rel == 0 ? "color:white" : i.rel == 1 ? 'color: #07e1a4;' : i.rel == 2 ? 'color:rgb(3, 255, 3);' : i.rel == 3 ? 'color:#ff4343;' : 'color:#9c9cff;')+"width:201px;cursor:pointer;border: 0.5px groove grey;"+(settings.roll_hide == 1 ? 'display:none;' : '')+"'class = 'who_is_here_child' data-tip = 'Klan: "+(i.clan != undefined ? i.clan : 'Brak')+"'data-nick = '"+i.nick+"'>"+ i.nick+" ("+i.level+""+i.prof+")</div>");
+        //kolorki dla poszczegolnych relacji
+    }
+    const divs = document.querySelectorAll('.who_is_here_child');
+    divs.forEach(el => el.addEventListener('click', event => {
+        if(edit_position == 1) return;
+        var nick = event.target.getAttribute("data-nick");
+        var input = document.getElementsByClassName("chat-message chat-input")[0].value;
+        if(input.length != 0) document.getElementsByClassName("chat-message chat-input")[0].value = "";
+        document.getElementsByClassName("chat-message chat-input")[0].value = '@"'+nick+'" ';
+        var hasClass = $(".chat-frame.save-position").hasClass("hidden")
+        if(hasClass){
+            $(".chat-frame.save-position").removeClass("hidden")
+        }
+    }));
+    $("#who_is_counter").html(players.length);
+}
+
+var lOP = window.map.loadOtherPlayer;
+window.map.loadOtherPlayer = function(data){
+    lOP(data);
+    console.log("DODAJEMY", data);
+    var s = players.find(o => o.nick == data.name);
+    if(s != undefined) {updateList(); return;};
+    players.push({nick: data.name, level: data.level, prof: data.profession == 1 ? "m" : data.profession == 2 ? "w" : "h", id: data.id, rel: checkRelation(data.id, data.clan), clan: data.clan});
+    updateList();
+    console.log(players);
+    //dodawanie
+}
+var uD = window.map.updateData;
+window.map.updateData = function(data){
+    uD(data);
+    if(data != undefined && 'deaths' in data){
+        updateList();
+    }
+}
+var sGW = window.map.showGroupWindow;
+window.map.showGroupWindow = function(data){
+    sGW(data);
+    group_members = [];
+    if("members" in data && data.members){
+        for(var i in data.members){
+            console.log(data.members[i].id);
+            group_members.push(data.members[i].id);
+        }
+    }
+    console.log(group_members);
+    updateList();
+}
+var sP = window.game.sendPacket;
+window.game.sendPacket = function(data, action){
+    sP.apply(this, arguments);
+    if(data == 1052){
+        console.log(data, action);
+        if(action.action == 'disband' || action.action == 'remove' || action.action == 'leave'){
+            var group = $(".group-window-content")[0].children
+            group_members = [];
+            for(var k of group){
+                group_members.push(k.classList[2].replace(/\D/g, ""));
+            }
+            console.log(group_members);
+            updateList();
+        }
+    }
+}
+function checkRelation(id, clan){
+    //priorytet - grupa, friend, clanmate, enemy, clan_enemy
+    if(group_members.length && group_members.includes(id)) return 1;
+    if(settings.friends[window.player.id] && settings.friends[window.player.id].includes(id)) return 2; //friend
+    if(settings.enemy[window.player.id] && settings.enemy[window.player.id].includes(id)) return 3; //enemy
+    if(settings.clan[window.player.id] && settings.clan[window.player.id] == clan && settings.clan[window.player.id] != undefined) return 4; //clanmate
+    //if(settings.clan.includes(clan)) return 5; //clan enemy
+    return 0;//nobody
+}
+var rFM = window.map.recFirstMesage;
+window.map.recFirstMesage = function(data){
+    rFM.apply(this, arguments);
+    if('map' in data){
+        $(".who_is_header").css("color", window.map.pvp_type == 0 ? "#ffbf49" : window.map.pvp_type == 1 ? "#ff4343" : "#03ff03");
+    }
+}
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    pSP(data);
+    if(data.code == "load_game"){
+        if(map_name != window.map.map_name){
+            map_name = window.map.map_name;
+            players = [];
+            updateList();
+        }
+    }
+    if(data.code == "my_clan"){
+        if(!(window.player.id in settings.clan) || settings.clan[window.player.id] != data.name){
+            console.log('sprawdzam klan');
+            settings.clan[window.player.id] = data.name;
+            settings.last_clan_check[window.player.id] = Date.now();
+            window.NarelsAPI.saveSettings(addonName, settings);
+            updateList();
+        }
+    }
+    if(data.code == "friends"){
+        console.log(data);
+        settings.friends[window.player.id] = [];
+        settings.enemy[window.player.id] = [];
+        for(var i of data.friends){
+            settings.friends[window.player.id].push(i.id);
+        }
+        for(var j of data.enemies){
+            settings.enemy[window.player.id].push(j.id);
+        }
+        settings.last_clan_check[window.player.id] = Date.now();
+        window.NarelsAPI.saveSettings(addonName, settings);
+        updateList();
+    }
+    //usuwanie
+    if(data.code == 1051){
+        console.log(data);
+        var index = players.findIndex(x => x.id === data.player.id);
+        if(index != -1) players.splice(index, 1);
+        updateList();
+    }
+    if(data.code == 1016){
+        group_members = [];
+        updateList();
+    }
+}
+window.reset_default_players_on_map = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+})();
