@@ -1,0 +1,162 @@
+// ==UserScript==
+// @name         a2_alkatria_notifi
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         none
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function() {
+var addonName = 'item_notification';//zmienne
+var description = ['Powiadomienie o zdobyciu łupu', 'Dodatek służy do powiadomiania o zdobytym przedmiocie, powiadamia nas efetkem wizualnym oraz opcjonalnym dźwiękiem, pozwala dostosować kolory efektów oraz dźwięk, który zostanie odtworzony. Możliwy jest wybór typów przedmiotów dla, których zadziała.'];
+var defaultSettings = {ignore_cristal: 1, ignore_rare: 0, ignore_epic: 0, ignore_legendary: 0, ignore_mythic: 0, music: "https://narelsiak.pl/extensions/fanfary.mp3",
+                       play_music: 1, music_vol: 50, effect_time: 20, color_rare: "#0000ff", color_epic: "#700f70", color_legendary: "#ffa500", color_mythic: "#ff0000"};//zmienne
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+var timeout;
+var audio = new Audio(settings.music);
+    audio.volume = parseInt(settings.music_vol) / 100;
+var sendP = window.game.sendPacket;
+window.game.sendPacket = function(code, data){
+    sendP(code, data);
+    if(code == 18){
+        if(el !== undefined && data.action == el.index){
+            clearTimeout(timeout);
+            audio.pause();
+            $(".cienFrame").remove();
+            $("#raidMessage").remove();
+            $("#cienBack")[0].style.display = "none";
+            el = undefined;
+        }
+    }
+}
+var el;
+if(!$("#cienBack").length){
+    console.log('add');
+    $(`<div id = 'cienBack' style = "display: none; pointer-events:none;position: absolute;width:100vw; height:100vh; box-shadow: inset 0 0 15cm 3cm red"></div>`).appendTo("#game");
+}
+var p = window.player.showLootWindow;
+window.player.showLootWindow = function(data, remove){
+    p(data, remove);
+    console.log(data, remove);
+    var maxItem = {type: -1};
+    for(var i of data){
+        if(i.type == 0 || i.type > 4 || (i.name.includes("Kryształ Rzemieślnika") && settings.ignore_cristal == 1)) continue;//tutaj zmienic
+        var b = 0;
+        switch(i.type){
+            case 1:
+                if(settings.ignore_rare == 1) b = 1;
+                break;
+            case 2:
+                if(settings.ignore_epic == 1) b = 1;
+                break;
+            case 3:
+                if(settings.ignore_legendary == 1) b = 1;
+                break;
+            case 4:
+                if(settings.ignore_mythic == 1) b = 1;
+                break;
+        }
+        if(!b){
+            var a = $(".loot-"+i.index)
+            if(i.type > maxItem.type){
+                maxItem = {type: i.type, name: i.name};
+                if(el !== undefined){$("#cienBack")[0].style.display = "none";$("#raidMessage").remove();clearTimeout(timeout)};
+                el = ({data: a[0].children[0], index: i.index});
+            }
+            $(`<div class = 'cienFrame' style = "pointer-events:none;position:absolute;top:-4px;left: -4px;width:40px; height:40px; box-shadow: 0 0 0.5cm 0.2cm ${(i.type == 1 ? settings.color_rare : i.type == 2 ? settings.color_epic : i.type == 3 ? settings.color_legendary : settings.color_mythic)}";"></div>`).appendTo(a[0].children[0]);
+        }
+    }
+    if(maxItem.type >= 1){
+            if(settings.play_music) audio.play();
+            $("#cienBack")[0].style.boxShadow = `inset 0 0 12cm 2cm ${(maxItem.type == 1 ? settings.color_rare : maxItem.type == 2 ? settings.color_epic : maxItem.type == 3 ? settings.color_legendary : settings.color_mythic)}`
+            $("#cienBack")[0].style.display = "block";
+            $("#cienBack")[0].style.opacity = 0.5;
+            window.game.broadCast("<span style = 'color:" + (maxItem.type == 1 ? settings.color_rare : maxItem.type == 2 ? settings.color_epic : maxItem.type == 3 ? settings.color_legendary : settings.color_mythic) +"!important' >Zdobyles przedmiot " + (maxItem.type == 1 ? "RZADKI" : maxItem.type == 2 ? "EPICKI" : maxItem.type == 3 ? "LEGENDARNY" : "MITYCZNY")+ "!<br>" + maxItem.name + "</span>", parseInt(settings.effect_time) * 10**3);
+            timeout = setTimeout(() => {flash(0)}, 250);//add
+    }
+}
+
+function flash(iteration){
+    console.log('here');
+    if(iteration * 2 >= parseInt(settings.effect_time) || el == undefined){
+        $(".cienFrame").remove();
+        $("#cienBack")[0].style.display = "none"
+        el = undefined;
+        return;
+    }
+    if(iteration % 2 == 0){
+        $("#cienBack").fadeOut(1800, 'linear');
+    }else{
+        $("#cienBack").fadeIn(1500, 'linear');
+    }
+    iteration++;
+    timeout = setTimeout(() => {flash(iteration)}, 2000);//add
+}
+window.reset_default_item_notification = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_item_notification = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+         <input id = "option_1" name = "ignore_cristal" class="settings-checkbox" type="checkbox" ${settings.ignore_cristal == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox">Nie powiadamiaj o zdobyciu kryształów </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_2" name = "ignore_rare" class="settings-checkbox" type="checkbox" ${settings.ignore_rare == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Nie powiadamiaj o zdobyciu przedmiotów rzadkich</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_3" name = "ignore_epic" class="settings-checkbox" type="checkbox" ${settings.ignore_epic == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Nie powiadamiaj o zdobyciu przedmiotów epickich</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_4" name = "ignore_legendary" class="settings-checkbox" type="checkbox" ${settings.ignore_legendary == 1 ? "checked" : ""}>
+         <label for = "option_4"><div class = "label-checkbox"> Nie powiadamiaj o zdobyciu przedmiotów legendarnych</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_5" name = "ignore_mythic" class="settings-checkbox" type="checkbox" ${settings.ignore_mythic == 1 ? "checked" : ""}>
+         <label for = "option_5"><div class = "label-checkbox"> Nie powiadamiaj o zdobyciu przedmiotów mitycznych</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_6" name = "play_music" class="settings-checkbox" type="checkbox" ${settings.play_music == 1 ? "checked" : ""}>
+         <label for = "option_6"><div class = "label-checkbox"> Czy puszczać muzykę? </div></label>
+         <div class = "clear mB5"></div>
+         Podaj link do muzyki:
+         <input id = "audio_test_source" type = "text" class="form-input" placeholder = "link do granej muzyki" style="width: 50%" name = "music" ${settings.music.length > 0 ? 'value="'+settings.music+'"' : ""}>
+         <div  onclick = "var audio_test = new Audio(document.getElementById('audio_test_source').value);audio_test.volume = parseInt(document.getElementById('music_test_loud').value)/100;audio_test.play();" style = "position:relative" class ="absolute mL60 button-1 overlock font-20">Test</div>
+         <div class = "clear mB5"></div>
+         Głośność muzyki 0 - 100: <input id = "music_test_loud" type = "text" pattern = "([0-9]|[1-9][0-9]|100)" class="form-input" placeholder = "#123456" style="width:70px" name = "music_vol" ${settings.music_vol ? 'value="'+settings.music_vol+'"' : ""}>
+         Czas trwania efektów(s): <input type = "text" pattern = "([0-9]|[1-9][0-9]|100)" class="form-input" placeholder = "#123456" style="width:70px" name = "effect_time" ${settings.effect_time ? 'value="'+settings.effect_time+'"' : ""}>
+         <div class = "clear mB5"></div>
+         Kolory dla przedmiotów w postaci: "#123456":
+         Rzadki: <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "color_rare" ${settings.color_rare.length > 0 ? 'value="'+settings.color_rare+'"' : ""}>
+         Epicki: <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "color_epic" ${settings.color_epic.length > 0 ? 'value="'+settings.color_epic+'"' : ""}>
+         <div class = "clear mB5"></div>
+         Kolory dla przedmiotów w postaci: "#123456":
+         Legendarny: <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "color_legendary" ${settings.color_legendary.length > 0 ? 'value="'+settings.color_legendary+'"' : ""}>
+         Mityczny: <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "color_mythic" ${settings.color_mythic.length > 0 ? 'value="'+settings.color_mythic+'"' : ""}>
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_item_notification();
+        })
+    };
+}
+})();
