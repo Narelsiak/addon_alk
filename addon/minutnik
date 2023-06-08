@@ -1,0 +1,347 @@
+// ==UserScript==
+// @name         a4_alkatria_minutnik
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       You
+// @match        https://alkatria.pl/game
+// @icon         none
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function(time) {
+var addonName = 'minutnik';
+var description = ['Minutnik', 'Dodatek służy do pokazywanie czasu respu potworków, kliknieciem prawym klawiszem na liste potworków odblokowuje, ponowne klikniecie zapisuje pozycje i blokuje przesuwanie. Przytrzymanie ctrl umożliwia usunięcie potwora bez oczekiwania na resp lub dodania własnego potwora/timera. Kliknięcie na nazwę przelogowuje nas na postać.'];
+var defaultSettings = {data: [], posX: 0, posY: 0, left_color: "#ff9900", play_sound: 0, sound: "", sound_vol: 50, save_rare: 1, save_epic: 1, save_legendary :1, save_mythic: 1, save_wander: 1, move_fps: 1};//zmienne
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+
+var doc_title_copy = document.title;
+var array_time = time.split(",");for(var e = 0; e< array_time.length; e++){array_time[e] = array_time[e].split(" ");}
+var need_sort = 0;
+var audio = new Audio(settings.sound);
+var server = "";
+audio.volume = parseInt(settings.sound_vol) / 100;
+window.ctrl_is_pressed = 0;
+var edit_position = 0;
+$(document).keydown(function(event) {
+    if (event.which == 17 && window.ctrl_is_pressed == 0){
+        if($("#window-mob")[0].children.length == 0){
+            $("#window-mob").append('<div id="mob_g_temp" class = "" style = "color:white;font-size: 25px;width: auto !important; position:relative;display: flex;">'+
+           '<div style = "margin-right: 10px">00:00</div>'+
+           '<div> Dodaj nowy timer </div>'+
+           '<span class = "x-button remove_button" style = "display:none;position:absolute;right:-20px;margin:auto;margin-left:10px;"></span>'+
+           '</div>');
+            $("#minutnik").css("display", "block");
+        }
+        $("#addNewTimer").css("display", "block");
+        $(".remove_button").each(function(ev) {
+            $(this).show();
+        });
+        window.ctrl_is_pressed = 1;
+    }
+});
+$(document).keyup(function(event) {
+    if (event.which == 17 && window.ctrl_is_pressed == 1){
+        if($("#window-mob")[0].children.length == 1 && $("#mob_g_temp").length){
+            $("#mob_g_temp").remove();
+            $("#minutnik").css("display", "none");
+        }
+        $("#addNewTimer").css("display", "none");
+        $(".remove_button").each(function(ev) {
+            $(this).hide();
+        });
+        window.ctrl_is_pressed = 0;
+    }
+});
+
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    pSP(data);
+    var rar = -1;
+    if(data.code == 54){
+        rar = arrayHaveThisType(window.game.monsters[data.id].type);
+        if(rar == -1) return;
+        if(window.game.monsters[data.id].short_name.includes("Prastary") || window.game.monsters[data.id].short_name.includes("Przywołany")) return;
+        settings.data.push(new newMob(data.id, window.game.monsters[data.id].short_name, rar, window.game.monsters[data.id].level, window.game.monsters[data.id].looktype));
+        sendActu('sort');
+    }
+}
+
+var lM = window.map.loadMonsters;
+window.map.loadMonsters = function(d){
+    if(server == ""){
+        server = window.game.host;
+        server = server.substring(server.lastIndexOf("/") + 1, server.length);
+    }
+    lM(d);
+    for(var i in d){
+        if(typeof(d[i]) == "object" && window.game.monsters[d[i].id].type > 0 && window.game.monsters[d[i].id].is_death == false){
+            for(var j = 0; j < settings.data.length; j++){
+                if(settings.data[j].id == d[i].id && server == settings.data[j].server){
+                    if(settings.play_sound == 1) audio.play();
+                    $("#mob_g_"+d[i].id).remove();
+                    settings.data.splice(j, 1);
+                    j--;
+                    sendActu();
+                }
+            }
+        }
+    }
+}
+
+function arrayHaveThisType(m_type){
+    switch(m_type){
+        case 1:
+            if(settings.save_rare == 1) return 1;
+            break;
+        case 2:
+            if(settings.save_epic == 1) return 2;
+            break;
+        case 3:
+            if(settings.save_legendary == 1) return 3;
+            break;
+        case 4:
+            if(settings.save_mythic == 1) return 4;
+            break;
+        case 5:
+            if(settings.save_wander == 1) return 5;
+            break;
+    }
+    return -1;
+}
+
+function calculateExpireTime(mob){
+    for(var e of array_time){
+        if(parseInt(mob.lookID) == parseInt(e[0])) return (Date.now() + (parseInt(e[1]) * 10**3));
+    }
+    return (Date.now() + 10 * 60 * 10**3);
+    //rzadkie y = 9.90941x + 48.74568
+    //epickie y = 8.52048x + 377.67503
+    //legendarne y = 10.71429x + 546.42857
+}
+
+function sendActu(f){
+    window.NarelsAPI.saveSettings(addonName, settings);
+    if(f == 'sort'/* && !window.ctrl_is_pressed*/){
+        settings.data.sort((a, b) => a.expire_time > b.expire_time ? 1 : -1);
+        refreshList();
+    }
+    if(!settings.data.length && $("#minutnik").css("display") == "block"){
+        document.title = doc_title_copy;
+        $("#minutnik").css("display", "none");
+    }
+    window.NarelsAPI.saveSettings(addonName, settings);
+}
+
+function contentActu(){
+    for(var i = 0; i < document.getElementById("window-mob").children.length; i++){
+        if(typeof(i) == "number" && document.getElementById("window-mob").children[0].lastChild.outerText != "00:00:00"){
+            var time = settings.data[i].expire_time - Date.now();
+            time = time / 1000;
+            var secs = time % 60;
+            time = (time - secs) / 60;
+            var mins = time % 60;
+            var hrs = (time - mins) / 60;
+            var minsU = mins;
+            var hrsU = hrs < 10 ? (minsU = mins < 10 ? "0"+ mins : mins, "0" + hrs) : hrs;
+            var secsU = secs < 0 ? "00" : secs < 10 ? "0" + Math.floor(secs) : Math.floor(secs);
+            /* if(secs < 0){
+                secs = "00";
+            }else{
+                secs = secs < 10 ? "0" + Math.floor(secs) : Math.floor(secs);
+            }*/
+            if(mins == 0 && hrs == 0 && secs < 31){
+                document.getElementById("window-mob").children[i].firstChild.innerHTML = "<span style = 'color:#ff9900'>"+(hrsU !== "00" ? hrsU + ":" : "")+minsU + ':' + secsU+"</span>";
+                if(i == 0) document.title = (hrsU !== "00" ? hrsU + ":" : "")+minsU + ':' + secsU + " "+ document.getElementById("window-mob").children[i].children[1].innerHTML;
+            }else{
+                document.getElementById("window-mob").children[i].firstChild.innerHTML = (hrsU !== "00" ? hrsU + ":" : "")+minsU + ':' + secsU;
+                if(i == 0) document.title = (hrsU !== "00" ? hrsU + ":" : "")+minsU + ':' + secsU + " " + document.getElementById("window-mob").children[i].children[1].innerHTML;
+            }
+        }
+    }
+}
+
+function refreshList(){
+    console.log('refresh');
+    $("#window-mob").children().remove();
+    for(let j = 0; j < settings.data.length; j++){
+        var replace;
+        if(window.player.id != settings.data[j].playerID){
+            replace = "window.location.replace('/game/login/" + settings.data[j].playerID + "');";
+        }else{
+            replace = "window.game.broadCast('Jestes na tej postaci...', 10000);"
+        }
+        var name_ = settings.data[j].name;
+        let obj = settings.data.filter(function(o) {
+            return o.name == name_;
+        });
+        if(obj.length >= 2) name_ += " (" + settings.data[j].server + ")";
+        $("#window-mob").append('<div onclick = " if(ctrl_is_pressed == 1) return; '+replace+'" data-server = "'+settings.data[j].server+'" id="mob_g_'+settings.data[j].id +'" class ="" style = "color:white;font-size: 25px;width: auto !important; position:relative;display: flex;" class="mob_'+settings.data[j].id+'">'+
+           '<div style = "margin-right: 10px">'+settings.data[j].expire_time+'</div>'+
+           '<div>'+name_+'</div>'+
+           '<span class = "x-button remove_button" style = "display:none;position:absolute;right:-20px;margin:auto;margin-left:10px;"></span>'+
+          '</div>');
+    }
+    var remove_butt = document.querySelectorAll('.remove_button');
+    remove_butt.forEach(el => el.addEventListener('click', event => {
+        for(var i = 0; i < settings.data.length; i++){
+            if(("mob_g_" + settings.data[i].id) == event.target.parentElement.id && settings.data[i].server == event.target.parentElement.getAttribute("data-server")){
+                $("#mob_g_"+settings.data[i].id).remove();
+                settings.data.splice(i, 1);
+                sendActu();
+                i--;
+            }
+        }
+    }));
+    contentActu();
+}
+function init(){
+    $(`<div class = "" id = "minutnik" style = "display: none; top:${settings.posY}px; left:${settings.posX}px;background:linear-gradient(90deg,rgba(0,0,0,.8) 0,rgba(0,0,0,.8) 80%,transparent);opacity:0.6;position:absolute; z-index:1000"><div id = "window-mob" style = ""></div></div>`).appendTo("#game")
+    if(settings.move_fps == 1){
+        $(".game-ping").css("bottom", 0);
+        $(".game-ping").css("top", "unset");
+    }
+    $("#minutnik").on("contextmenu", function(e) {
+    if(edit_position == 0){
+        $("#minutnik").addClass("draggable");
+        edit_position = 2;
+        window.game.broadCast("Pozycja odblokowana", 10000);
+        setTimeout(() => {edit_position = 1}, 250);
+    }else if(edit_position == 1){
+        edit_position = 2;
+        $("#minutnik").removeClass("draggable");
+        settings.posX = $(this).offset().left;
+        settings.posY = $(this).offset().top;
+        window.NarelsAPI.saveSettings(addonName, settings);
+        window.game.broadCast("Pozycja zablokowana i zapisana", 10000);
+        setTimeout(() => {edit_position = 0}, 250);
+    }
+});
+$(`<div id = "addNewTimer" style = "margin-top:3px;position:absolute;display:none;cursor:pointer;width:20px;scale:1.4;height:20px;background-image: url('https://alkatria.pl/templates/client/default/images/buttons/plus.png');"></div></div>`).appendTo("#minutnik")
+$("#addNewTimer").on("click", function(e) {
+    $(`<div id = "addNewTimerInput" style = "z-index:999;font-size: 25px;color:white;display: block; top:30%; left:25%;background:black;opacity:0.6;position:absolute; z-index:1000">
+Nazwa potwora: <input  id = "mob_name_id" type = "text" class="form-input" placeholder = "Nazwa potwora - min 3 znaki" style="width: 250px" name = "mob_name"}>
+H: <input  id = "mob_h_add" type = "text" class="form-input" style="width: 50px" placeholder = "0-999" name = "mob_h"}>
+M: <input  id = "mob_m_add" type = "text" class="form-input" style="width: 50px" placeholder = "0-59" name = "mob_m"}>
+S: <input  id = "mob_s_add" type = "text" class="form-input" style="width: 50px" placeholder = "0-59" name = "mob_s"}>
+<button style = "cursor:pointer" id = "buttonAddTimer" type="button">Dodaj</button>
+<button style = "cursor:pointer" id = "buttonAbandonTimer" type="button">Anuluj</button>
+    </div>`).appendTo("#game")
+    $("#buttonAbandonTimer").on("click", function(e) {
+        $("#addNewTimerInput").remove()
+    });
+    $("#buttonAddTimer").on("click", function(e) {
+        var h = $("#mob_h_add").val(); h == "" ? h = 0 : h = parseInt(h);
+        var m = $("#mob_m_add").val(); m == "" ? m = 0 : m = parseInt(m);
+        var s = $("#mob_s_add").val(); s == "" ? s = 0 : s = parseInt(s);
+        var name = $("#mob_name_id").val();
+        if(typeof(h) != 'number' || typeof(m) != 'number' || typeof(s) != 'number' || name.length < 3 || h < 0 || h > 999 || m < 0 || m > 59 || s < 0 || s > 59){
+            window.game.broadCast("<span style = 'color:white'>Podaj poprawne dane</span>", 10000);
+            return;
+        }
+        var expire_time = Date.now() + h * 3600 * 10**3 + m * 60 * 10**3 + s * 10**3
+        settings.data.push({lookID: -1, id: (Math.random() + 1).toString(36).substring(3), name: $("#mob_name_id").val(), rarity: -1, lvl: -1, playerID: window.player.id, expire_time : expire_time});
+        window.game.broadCast("<span style = 'color:white'>Dodano nowy timer</span>", 10000);
+        sendActu('sort');
+        $("#addNewTimerInput").remove();
+    });
+});
+}
+setInterval(function (){
+    if(!settings.data.length) return;
+    if($("#minutnik").css("display") == "none" && settings.data.length){
+        $("#minutnik").css("display", "block");
+    }
+    console.log('aktualizuje dane');
+    var time_now = Date.now();
+    for(var i = 0; i < settings.data.length; i++){
+        if(settings.data[i].expire_time < (time_now - 30 * 10 ** 3)){
+            $("#mob_g_"+settings.data[i].id).remove();
+            settings.data.splice(i, 1);
+            sendActu();
+            i--;
+        }
+    }
+
+    if(settings.data.length && document.getElementById("window-mob").children.length != settings.data.length){
+        refreshList();
+    }
+    if(!settings.data.length) return;
+    contentActu();
+}, 1000);
+
+class newMob{//tworzenie mobkow.
+    constructor(id, name, rar, lvl, looktype){
+        this.lookID = looktype;
+        this.id = id;
+        this.name = name;
+        this.rarity = rar;
+        this.lvl = lvl;
+        this.expire_time = calculateExpireTime(this);
+        this.playerID = window.player.id;
+        this.server = server;
+    }
+}
+window.reset_default_minutnik = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_minutnik = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+         <input id = "option_1" name = "save_rare" class="settings-checkbox" type="checkbox" ${settings.save_rare == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Zapisuj rzadkie potwory </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_2" name = "save_epic" class="settings-checkbox" type="checkbox" ${settings.save_epic == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Zapisuj epickie potwory</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_3" name = "save_legendary" class="settings-checkbox" type="checkbox" ${settings.save_legendary == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Zapisuj legendarne potwory</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_4" name = "save_mythic" class="settings-checkbox" type="checkbox" ${settings.save_mythic == 1 ? "checked" : ""}>
+         <label for = "option_4"><div class = "label-checkbox"> Zapisuj mityczne potwory</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_5" name = "save_wander" class="settings-checkbox" type="checkbox" ${settings.save_wander == 1 ? "checked" : ""}>
+         <label for = "option_5"><div class = "label-checkbox"> Zapisuj wędrujące potwory</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_6" name = "move_fps" class="settings-checkbox" type="checkbox" ${settings.move_fps == 1 ? "checked" : ""}>
+         <label for = "option_6"><div class = "label-checkbox"> Przesuń wskaźnik fps'ów na dół</div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_7" name = "play_sound" class="settings-checkbox" type="checkbox" ${settings.play_sound == 1 ? "checked" : ""}>
+         <label for = "option_7"><div class = "label-checkbox"> Odtwarzaj dźwięk przy respie</div></label>
+         <div class = "clear mB5"></div>
+         Podaj link do muzyki przy respie:
+         <div class = "clear mB5"></div>
+         <input  id = "audio_test_source" type = "text" class="form-input" placeholder = "link do granej muzyki" style="width: 70%" name = "sound" ${settings.sound.length > 0 ? 'value="'+settings.sound+'"' : ""}>
+          <div  onclick = "var audio_test = new Audio(document.getElementById('audio_test_source').value);audio_test.volume = parseInt(document.getElementById('music_test_loud').value) / 100;audio_test.play();" style = "position:relative" class ="absolute mL60 button-1 overlock font-20">Test</div>
+         <div class = "clear mB5"></div>
+         Głośność muzyki 0 - 100: <input id = "music_test_loud" type = "text" pattern = "([0-9]|[1-9][0-9]|100)" class="form-input" placeholder = "#123456" style="width:70px" name = "sound_vol" ${settings.sound_vol ? 'value="'+settings.sound_vol+'"' : ""}>
+         Kolor podświetlenia przed respem: <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "left_color" ${settings.left_color.length > 0 ? 'value="'+settings.left_color+'"' : ""}>
+
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_minutnik();
+        })
+    };
+}
+init();
+})(`232 100,129 100,200 120,196 150,183 150,181 210,179 240,184 270,175 300,185 330,222 480,225 540,220 600,223 600,230 600,353 600,152 16200,347 9000,139 600,214 900,354 900,224 900,115 900,221 1200,355 1200,381 405,250 600,296 600,264 600,278 600,274 600,324 600,292 600,298 600,287 600,318 600,282 600,312 600,304 600,330 600,342 600,331 600,256 16200,356 9000,357 16200,358 9000,260 900,265 900,288 900,283 900,325 900,313 900,337 900,305 900,243 1200,297 1200,319 1200,299 1200,306 1200,405 9000`);
