@@ -1,0 +1,140 @@
+// ==UserScript==
+// @name         a7_quick_group
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       Narels
+// @match        https://alkatria.pl/game
+// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+(function() {
+var addonName = 'quick_group';
+var description = ['Szybka grupa', 'Dodatek pozwala wysyłać zaproszenie do grupy z użyciem klawisza "k" oraz akceptować automatycznie zaproszenia. <br>'+
+                  'Wybranie opcji akceptuj od klanowiczy i/lub przyjaciol wyswietla komunikat dla pozostałych osób z którymi nie mamy wybranych relacji, analogiczna sytuacja do wysyłania.<br> Wybranie opcji nie akceptuj wyświetla zawsze okno akceptacji<br> Klan i przyjaciele aktualizuja sie raz dzienne, mozna to wymusic resetując ustawienia do domyślnych.'];
+var defaultSettings = {no_accept: 0, friends: {}, clan: {}, key_to_send: "k", accept_from_clanmate: 0, send_to_clanmate: 0, accept_from_friend : 0, send_to_friend: 0, last_clan_check: {}};
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+setTimeout(() => {
+if(!(window.player.id in settings.last_clan_check) || Date.now() - settings.last_clan_check[window.player.id] > 3600 * 10**3){
+    settings.last_clan_check[window.player.id] = 0;
+    window.game.sendPacket("clans", {action: "myclan"});
+    window.game.sendPacket("friends", {});
+}}, 3000);//add
+$(document).keydown(function(event) {
+    if(event.originalEvent.key == settings.key_to_send && event.target.tagName!="TEXTAREA" && event.target.tagName!='INPUT'){
+        for(var i in window.game.players){
+            if("id" in window.game.players[i]){
+                if(Math.abs(window.player.x - (window.game.players[i].x - 1)) <= 5 && Math.abs(window.player.y - (window.game.players[i].y - 1)) <= 5){
+                    console.log(settings.friends[window.player.id].indexOf(window.game.players[i].id));
+                    console.log(i, settings);
+                    if(settings.send_to_clanmate == 0 && settings.send_to_friend == 0) {sendInvitation(window.game.players[i].id); continue;};
+                    if(settings.send_to_clanmate == 1 && settings.clan[window.player.id] && window.game.players[i].clan == settings.clan[window.player.id] && settings.clan[window.player.id]) {sendInvitation(window.game.players[i].id); continue;};
+                    if(settings.send_to_friend == 1 && settings.friends[window.player.id].indexOf(window.game.players[i].id) != -1) {sendInvitation(window.game.players[i].id); continue;};
+                    //if(settings.send_to_clanmate == 0 || (settings.send_to_clanmate == 1 && window.game.players[i].clan == settings.clan)) sendInvitation(window.game.players[i].id);
+                }
+            }
+        }
+    }
+});
+
+const sleep = (ms) => {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+async function sendInvitation(id){
+    window.game.sendPacket(1052, {action: "invite", player: id});
+    sleep(50);
+}
+
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    //console.log(data);
+    if(data.code == "my_clan"){
+        if(!(window.player.id in settings.clan) || settings.clan[window.player.id] != data.name){
+            settings.clan[window.player.id] = data.name;
+            settings.last_clan_check[window.player.id] = Date.now();
+            window.NarelsAPI.saveSettings(addonName, settings);
+        }
+    }
+    if(data.code == "friends"){
+        settings.friends[window.player.id] = [];
+        for(var i of data.friends){
+            settings.friends[window.player.id].push(i.id);
+        }
+        settings.last_clan_check[window.player.id] = Date.now();
+        window.NarelsAPI.saveSettings(addonName, settings);
+    }
+    if(data.code == 1052){
+        console.log(data);
+        if(settings.no_accept == 0 &&
+           ((settings.accept_from_clanmate == 0 && settings.accept_from_friend == 0) ||
+            (settings.accept_from_clanmate == 1 && window.game.players[data.id].clan == settings.clan && settings.clan != "") ||
+            (settings.accept_from_friend == 1 && settings.friends[window.player.id].indexOf(data.id) != -1))){
+            setTimeout(() => {
+                window.game.sendPacket(1052, {
+                    action: 'accept',
+                    player: data.id
+                });
+            }, 150);
+            return;
+        }
+    }
+    pSP(data);
+}
+
+window.reset_default__quick_group = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+
+window.showMenu_quick_group = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+
+         <input id = "option_1" name = "accept_from_clanmate" class="settings-checkbox" type="checkbox" ${settings.accept_from_clanmate == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Akceptuj automatycznie zaproszenia od klanowiczy </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_2" name = "send_to_clanmate" class="settings-checkbox" type="checkbox" ${settings.send_to_clanmate == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox">Wysyłaj zaproszenia do klanowiczy</div></label>
+         <div class = "clear mB5"></div>
+
+         <input id = "option_3" name = "accept_from_friend" class="settings-checkbox" type="checkbox" ${settings.accept_from_friend == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Akceptuj automatycznie zaproszenia od przyjaciół </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_4" name = "send_to_friend" class="settings-checkbox" type="checkbox" ${settings.send_to_friend == 1 ? "checked" : ""}>
+         <label for = "option_4"><div class = "label-checkbox">Wysyłaj zaproszenia do przyjaciół</div></label>
+         <div class = "clear mB5"></div>
+
+         Klawisz, którym wysyłać zaproszenie: <input type = "text" pattern = "[a-zA-Z0-9]" class="form-input" placeholder = "klawisz" style="width:70px" name = "key_to_send" value = "${settings.key_to_send}">
+         <div class = "clear mB5"></div>
+         <input id = "option_5" name = "no_accept" class="settings-checkbox" type="checkbox" ${settings.no_accept == 1 ? "checked" : ""}>
+         <label for = "option_5"><div class = "label-checkbox">Nie akceptuj automatycznie zaproszeń</div></label>
+         <div class = "clear mB5"></div>
+
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_quick_group();
+        })
+    };
+}
+})();
