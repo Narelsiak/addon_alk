@@ -1,0 +1,333 @@
+// ==UserScript==
+// @name         a1_alkatria_Wedrujace&&sciezka
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  try to take over the world!
+// @author       You
+// @match        https://alkatria.pl/game
+// @icon         none
+// @grant        none
+// ==/UserScript==
+/* globals jQuery, $, waitForKeyElements */
+
+//tutaj wzorzec ustawien
+(function() {
+var addonName = 'wander_finder';//zmienne
+var description = ['Szukajka wędrujących', 'Dodatek wyszukuje potwory wędrujące na mapie - pozwala na pokazanie ścieżki, która nas do nich prowadzi, a także umożliwia zawołanie klanu lub świata. Możliwe jest również wysłanie powiadomienia na Discird z pomocą webhooka.'];
+var defaultSettings = {show_path_auto: 0, path_color: "#00FFFF", notify_clan_auto: 0, notify_dc_auto: 0, dc_webhook: "", dc_webhook_death: "", notify_dc_death : 0, ping_content: ""};//zmienne
+var settings = window.NarelsAPI.loadSettings(addonName, defaultSettings);
+if(!("ping_content" in settings)){
+    settings.ping_content = defaultSettings.ping_content;
+    console.log(settings);
+    window.NarelsAPI.saveSettings(addonName, settings);
+}
+/*$(document).on('keypress',function(e) {
+    if(e.which == 114) {
+        window.showMenu_wander_finder();
+    }
+});*/
+var deepClone = {};
+var mapName;
+var temporary_show_path = 0;
+var pSP = window.game.parseServerPacket;
+window.game.parseServerPacket = function(data){
+    pSP(data);
+    if(data.code == 54){
+        if(!jQuery.isEmptyObject(deepClone) && data.id == deepClone.id){
+            if(settings.notify_dc_death && !deepClone.name.includes("Przywołany")) notify.callDcDeath("");
+            console.log(deepClone);
+            //deepClone = {};
+            $(".path_").remove();
+            temporary_show_path = 0;
+        }
+    }
+}
+
+var lM = window.map.loadMonsters;
+window.map.loadMonsters = function(d){
+    if(mapName == undefined){mapName = window.map.map_name;};
+    var TmapName = window.map.map_name;
+    if(mapName != TmapName){deepClone = {}; mapName = window.map.map_name;};
+    lM(d);
+    if(!("dc_webhook_death" in settings)){
+        console.log('here');
+        settings.dc_webhook_death = defaultSettings.dc_webhook_death;
+        window.NarelsAPI.saveSettings(addonName, settings);
+    }
+    if(!("notify_dc_death" in settings)){
+        settings.notify_dc_death = defaultSettings.notify_dc_death;
+        window.NarelsAPI.saveSettings(addonName, settings);
+    }
+    //useless fragmenty wyzej, ale musza zostac..
+    for(var i in d){
+        if(d[i].name.includes("Wędrujący") && d[i].is_death == false && jQuery.isEmptyObject(deepClone)){
+            //if((d[i].name.includes("Rzadki") || d[i].name.includes("Epicki")) && d[i].is_death == false && jQuery.isEmptyObject(deepClone)){
+            let send = d[i];
+            setTimeout(() => {showBox(send);}, 250);//add
+            return;
+        }
+    }
+}
+
+function showBox(monster){
+    console.log(monster);
+    var m = {};
+    m.el = $('[data-monster='+monster.id+']');
+    if(m.el){
+        m.out = m.el.css("backgroundImage");
+        m.out = m.out.substring(m.out.indexOf('url("') + 5, m.out.indexOf('")'));
+        m.h = m.el.css("height");
+        m.w = m.el.css("width");
+        m.lvl = monster.level;
+        m.x = monster.x;
+        m.y = monster.y;
+        m.name = monster.short_name;
+        m.map = window.map.map_name;
+        m.id = monster.id;
+        deepClone = JSON.parse(JSON.stringify(m))
+        console.log(deepClone);
+$(`
+<div id = "rareMob" class=" window-centered draggable" class="save-position" style = "z-index:1200;height:0px;">
+<div class = "window-4-heading">
+   <div class="title-label overlock font-20"> Znaleziono</div>
+<div style = "position:absolute; left:450px; top:10px; width:37px;height:37px;cursor:pointer;display:inline-block;background: url(https://alkatria.pl/templates/client/default/images/icons/close_n.png);"class = "heading-4" onclick = "$('#rareMob').remove();"></div>
+</div>
+<div id = "window-findmob" style = "padding:20px;margin-top: -9px;width:461px; height:492px;background-image: url('https://alkatria.pl/templates/client/default/images/windows/window_equipment_empty.png')">
+   <div id = "allAboutMob">
+      <div style = "font-size: 25px;position: relative;text-align: center;"><strong>Znaleziono wędrującego!</strong></div>
+      <div style ="font-size: 20px;margin-top: 10px;text-align:center;position:relative">${deepClone.name} (${deepClone.lvl})</div>
+      <div style ="font-size: 15px;margin-top: 10px;text-align:center;position:relative">(${deepClone.x}, ${deepClone.y})</div>
+      <div id = "mobImg" style = "margin-top: 10px;width: ${deepClone.w};height:${deepClone.h};background-image:url(${deepClone.out});background-position: 0px 0px;display: block;margin-left: auto;margin-right: auto;position:relative" class = "mobod"></div>
+      <div id "buttony">
+         <div id = "showPath" class="button-2 overlock mB5 font-20" style = "display:block;position:relative;margin:auto;margin-top: 15px"> Pokaż ścieżkę </div>
+         <div data-tip = "Z webhookiem działa @everyone, @here lub <@&ID_ROLI>, więc nie mając id roli @cokolwiek nie zadziała ):" id = "callDc" class="button-2 overlock mB5 font-20" style = "left:123px;float:left;display:block;position:relative;margin:auto;margin-top: 15px"> Zawołaj discord </div>
+
+         <input  id = "ping_content" name = "ping_optional" class="settings-checkbox" type="checkbox">
+         <label style = "margin-top:20px;top:-5px;left:121px;position:relative" for = "ping_content"><div class = "label-checkbox"></div></label>
+<input type = "text" pattern = "@.*"class="form-input" placeholder = "@here" style="margin-top:20px;width:86px;left:121px;position:relative" id = "ping_content_value" ${settings.ping_content.length > 0 ? 'value="'+settings.ping_content+'"' : ""}>
+         <div id = "callClan" class="button-2 overlock mB5 font-20" style = "margin-top:10px !important;display:block;position:relative;margin:auto"> Zawołaj klan</div>
+         <div id = "callAll" class="button-2 overlock mB5 font-20" style = "display:block;position:relative;margin:auto;margin-top: 15px"> Zawołaj świat </div>
+      </div>
+   </div>
+</div>
+`).appendTo("#game");
+        //<input id = "ping_content" type = "text" class="form-input" placeholder = "@ping(opcjonalny)" style="position:relative;left:40px;margin-top:19px;width:150px" name = "dc_ping"
+        if(document.querySelector("#showPath")){
+            document.querySelector("#showPath").addEventListener("click", e => {
+                temporary_show_path = 1;
+                if(settings.show_path_auto == 0) searchPath(window.game.monsters[deepClone.id]);
+            })
+        }
+        if(document.querySelector("#callDc")){
+            document.querySelector("#callDc").addEventListener("click", e => {
+                //discord ajax
+                var pingTrue = $("#ping_content")[0].checked;
+                var pingContent = $("#ping_content_value")[0].value;
+                pingTrue == 1 ? notify.callDc(" " + pingContent) : notify.callDc("");
+            })
+        }
+        if(document.querySelector("#callClan")){
+            document.querySelector("#callClan").addEventListener("click", e => {
+                notify.callClan();
+                //$('.chat-message').val('');
+            })
+        }
+        if(document.querySelector("#callAll")){
+            document.querySelector("#callAll").addEventListener("click", e => {
+                notify.callAll();
+                //$('.chat-message').val('');
+            })
+        }
+        $("<style>.trasa_{position: absolute; background-Color:"+settings.path_color+"; width: 16px; height: 16px; z-Index: 1; opacity: 0.6}</style>").appendTo("head");
+        if(settings.notify_clan_auto == 1) notify.callClan();
+        //if(settings.notify_dc_auto == 1) notify.callDc();
+        if(settings.show_path_auto == 1) searchPath(window.game.monsters[deepClone.id]);
+    }
+}
+const notify = {
+    callClan(){
+        if(window.game.hasClan == 1){
+            var msg = "Zapraszam na: "+ deepClone.name+ " na mapie: " + deepClone.map + " ("+deepClone.x + ", "+deepClone.y +")";
+            console.log(msg, 'klan');
+            window.game.chatChannel(4);
+            setTimeout(() => {if($(".active")[0].classList.value.includes("channel-4")) window.game.sendPacket(4, {message: msg}); else notify.callClan()}, 250);//add
+        }
+    },
+    callAll(){
+        var msg = "Zapraszam na: "+ deepClone.name+ " na mapie: " + deepClone.map + " ("+deepClone.x + ", "+deepClone.y +")";
+        console.log(msg, 'all');
+        window.game.chatChannel(3);
+        setTimeout(() => {if($(".active")[0].classList.value.includes("channel-3")) window.game.sendPacket(4, {message: msg}); else notify.callAll()}, 250);//add
+    },
+    callDc(v){
+        if(settings.dc_webhook.length > 0){
+            var msg = "Zapraszam na: "+ deepClone.name+ " na mapie: " + deepClone.map + " ("+deepClone.x + ", "+deepClone.y +")";
+            if(deepClone == {}) msg = "Wiadomosc testowa ^^";
+            $.ajax({
+                url: settings.dc_webhook,
+                type: "POST",
+                data: JSON.stringify({
+                    username: 'Wędrujący...',
+                    avatar_url: "",
+                    content: msg + v,
+                }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                async: true,
+            })
+        }
+    },
+    callDcDeath(v){
+        console.log(settings.dc_webhook_death, settings.dc_webhook);
+        if(settings.dc_webhook_death.length > 0){
+            const d = new Date();
+            let hour = d.getHours();
+            var msg = deepClone.name+ " został ubity o " + d.getHours() + ":" + d.getMinutes();
+            console.log(msg);
+            $.ajax({
+                url: settings.dc_webhook_death,
+                type: "POST",
+                data: JSON.stringify({
+                    username: 'Wędrujący...',
+                    avatar_url: "",
+                    content: msg + v
+                }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                async: true,
+            })
+        }
+    }
+}
+function searchPath(m, dir){
+    var playerActualCord = document.getElementById("my-character");
+    if(playerActualCord == null){
+        setTimeout(() => {searchPath(window.game.monsters[deepClone.id]);}, 100);//add
+        return;
+    }
+    if(!deepClone.hasOwnProperty('obstacles')){
+        deepClone.obstacles = JSON.parse(JSON.stringify(window.map.obstacles));
+        var monster = window.game.monsters;
+        for(var i in monster){
+            if(typeof(monster[i]) == "object"){
+                deepClone.obstacles[monster[i].x][monster[i].y] = 0;
+            }
+        }
+    }
+    var path = window.findShortestPath([window.player.x, window.player.y], [m.x + 1, m.y + 1], JSON.parse(JSON.stringify(deepClone.obstacles)));
+    $(".trasa_").remove();
+    //console.log(path);
+    var actX = window.player.x - 1;
+    var actY = window.player.y - 1;
+    for(var j = 0; j < path.length; j++){
+        switch(path[j]){//1 - lewo, 2 - prawo, 4 - dol, 3 - gora
+            case '1':
+                actX++;
+                break;
+            case '2':
+                actX--;
+                break;
+            case '3':
+                actY++;
+                break;
+            case '4':
+                actY--;
+                break;
+        }
+        $("#map-full").append('<div class="trasa_"></div>');
+        $(".trasa_:last-child").css({
+            top: actY * 32 + 16 + 'px',
+            left: actX * 32 + 8 + 'px'
+        });
+    }
+}
+
+(function(f) {
+    window.player.movePlayer = function() {
+        f.apply(window.player, arguments);
+        if(!jQuery.isEmptyObject(deepClone) && window.game.monsters && (settings.show_path_auto == 1 || temporary_show_path == 1)){
+            var d = window.game.monsters[deepClone.id];
+            if(d == undefined && !jQuery.isEmptyObject(deepClone)){
+                deepClone = {};
+                $(".path_").remove();
+            }else{
+                searchPath(d, arguments[0]);
+            }
+        }
+}
+})(window.player.movePlayer);
+window.reset_default_wander_finder = function(){
+    window.NarelsAPI.resetSettings(addonName, defaultSettings);
+}
+window.showMenu_wander_finder = function(){
+    settings = window.NarelsAPI.loadSettings(addonName);
+$(`
+<div id ="window-settings-addon">
+   <div class = "window-1-heading"><div class ="title-label overlock font-20 title-text">Ustawienia</div></div>
+   <div id = "window-content" class = "window-1">
+      <strong><center style = "font-size:25px"> ${description[0]}</center></strong>
+      <div class = "clear mB5"></div>
+      ${description[1]}
+      <div class = "clear mB5"></div>
+      <form action = "javascript:;" onsubmit = "window.NarelsAPI.updateSettings(this);return false;" class = "settings-item settings-general" name = "${addonName}">
+         <input id = "option_1" name = "show_path_auto" class="settings-checkbox" type="checkbox" ${settings.show_path_auto == 1 ? "checked" : ""}>
+         <label for = "option_1"><div class = "label-checkbox"> Automatycznie pokaż ścieżkę do potwora </div></label>
+         <div class = "clear mB5"></div>
+         <input id = "option_2" name = "notify_clan_auto" class="settings-checkbox" type="checkbox" ${settings.notify_clan_auto == 1 ? "checked" : ""}>
+         <label for = "option_2"><div class = "label-checkbox"> Automatycznie powiadom klan</div></label>
+         <div class = "clear mB5"></div>
+         `
+  /*<input id = "option_3" name = "notify_dc_auto" class="settings-checkbox" type="checkbox" ${settings.notify_dc_auto == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Automatycznie powiadom discorda</div></label>
+         <div class = "clear mB5"></div>*/
+  +`
+         Podaj kolor pokazywanej ścieżki w postaci szesnastkowej "#123456": <input type = "text" pattern = "^#([0-9a-fA-F]{6})$"class="form-input" placeholder = "#123456" style="width:70px" name = "path_color" ${settings.path_color.length > 0 ? 'value="'+settings.path_color+'"' : ""}>
+         <div class = "clear mB5"></div>
+         Podaj webhooka discord do wołania graczy: <input type = "text" class="form-input" placeholder = "link do webhooka" style="width: 100%" name = "dc_webhook" ${settings.dc_webhook.length > 0 ? 'value="'+settings.dc_webhook+'"' : ""}>
+         <div class = "clear mB5"></div>
+`+
+ /*        <input type="radio" name="nazwa_zmiennej_do_ktorej_przypisujemy" value="to_co_chcemy_zapisac0" ${settings.nazwa_zmiennej_do_ktorej_przypisujemy == 0 ? "checked" : ""}>test
+         <div class = "clear mB5"></div>
+         <input type="radio" name="nazwa_zmiennej_do_ktorej_przypisujemy" value ="to_co_chcemy_zapisac1" ${settings.show_path_auto == 1 ? "checked" : ""}>test1
+         <div class = "clear mB5"></div>
+         <input type="radio" name="nazwa_zmiennej_do_ktorej_przypisujemy" value = "to_co_chcemy_zapisac2" ${settings.nazwa_zmiennej_do_ktorej_przypisujemy == 2 ? "checked" : ""}>test2
+         <div class = "clear mB5"></div>
+*/
+  `
+         <input id = "option_3" name = "notify_dc_death" class="settings-checkbox" type="checkbox" ${settings.notify_dc_death == 1 ? "checked" : ""}>
+         <label for = "option_3"><div class = "label-checkbox"> Wysyłaj powiadomienie na webhooka o ubitym wędrującym </div></label>
+         <div class = "clear mB5"></div>
+
+         Podaj webhooka discord do wysyłania powiadomień o ubitym wędrującym <input type = "text" class="form-input" placeholder = "link do webhooka" style="width: 100%" name = "dc_webhook_death" ${settings.dc_webhook_death.length > 0 ? 'value="'+settings.dc_webhook_death+'"' : ""}>
+         <div class = "clear mB5"></div>
+         Podaj domyślny ping, ktory chcesz mieć ustawiony z @:
+         <div class = "clear mB5"></div>
+         Z webhookiem działa @everyone, @here lub <@&ID_ROLI>, więc nie mając id roli @cokolwiek nie zadziała ):
+         <input id = "testowe_pingi" type = "text" class="form-input" placeholder = "@here" style="width:250px" name = "ping_content" ${settings.ping_content.length > 0 ? 'value="'+settings.ping_content+'"' : ""}>
+                     <div id = "testDc" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Test dc</div>
+         <div class = "clear mB5"></div>
+         Przed testem zapisz
+         <div style ="position:absolute;bottom:-560px;left:14px;">
+            <div class ="absolute mL60 button-1 overlock font-20 modal-close">Anuluj</div>
+            <div id = "reset_to_default" class ="absolute mL60 button-1 overlock font-20" style ="left:330px;">Domyślne</div>
+            <input type = "submit" value = "Zapisz" id = "saveChanges" class ="absolute mL60 button-1 overlock font-20" style ="padding-top: 4px !important; height: 34px !important; border:none;left:662px">
+         </div>
+      </form>
+   </div>
+</div>`).appendTo("#display-window");
+    var dc_test = $("#testDc");
+    if(dc_test.length){
+        dc_test[0].addEventListener("click", e=>{
+            notify.callDc(" " + $("#testowe_pingi")[0].value);
+        })
+    }
+    var reset_to_default = $("#reset_to_default");
+    if(reset_to_default.length){
+        reset_to_default[0].addEventListener("click", e => {
+            window.NarelsAPI.resetSettings(addonName, defaultSettings);
+            $("#window-settings-addon").remove();
+            window.showMenu_wander_finder();
+        })
+    };
+}
+})();
