@@ -83,24 +83,6 @@ function parseData(data){
     sortByServer();
 }
 function sortByServer (){
-   /* var cp = (JSON.parse(JSON.stringify(settings.character_list[0])));
-    cp.nick = "Narels";
-    cp.server = "cwsd";
-    settings.character_list.push(cp);
-    cp.nick = "Narels";
-    cp.server = "cwsd";
-        settings.character_list.push(cp);
-        settings.character_list.push(cp);
-        settings.character_list.push(cp);
-        settings.character_list.push(cp);
-        settings.character_list.push(cp);
-        settings.character_list.push(cp);
-            settings.character_list.push(cp);
-            settings.character_list.push(cp);
-            settings.character_list.push(cp);
-            settings.character_list.push(cp);
-            settings.character_list.push(cp);
-            settings.character_list.push(cp);*/
     var server = document.title.substring(document.title.lastIndexOf("::") + 3);
     console.log(server);
     var server_list = settings.character_list.map(function (el) {return el.server;});
@@ -112,15 +94,12 @@ function sortByServer (){
     console.log(settings.sort);
     switch(settings.sort){
         case 0:
-            console.log('dupa0')
             settings.character_list.sort((a, b) => parseInt(b.nick.substring(b.nick.indexOf("(") + 1, b.nick.length -1)) - parseInt(a.nick.substring(a.nick.indexOf("(") + 1, a.nick.length -1)));
             break;
         case 1:
-            console.log('dupa0')
             settings.character_list.sort((a, b) => parseInt(a.playerID) - parseInt(b.playerID));
             break;
         case 2:
-            console.log('dupa0')
             settings.character_list.sort((a, b) => (a.nick > b.nick) ? 1 : -1)
             break;
     }
@@ -128,26 +107,6 @@ function sortByServer (){
     createChangeMenu(server_list);
 }
 function createChangeMenu(server_list){
-   /* settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);
-        settings.character_list.push(settings.character_list[0]);
-    settings.character_list.push(settings.character_list[0]);*/
     $(".menu-right-content")[0].style.zIndex = 1;
     $(`<div id = "character_box" style = "
     position: absolute;
